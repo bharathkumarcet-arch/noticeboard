@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+
+{% block title %}Sign In - Shree Devi Institute of Technology{% endblock %}
+
+{% block content %}
+<div class="auth-wrapper">
+  <div class="auth-card">
+    <div class="auth-header">
+      <div style="font-size: 2.25rem; margin-bottom: 0.5rem;">🏛</div>
+      <h2 style="font-size: 1.5rem; font-weight: 800; color: var(--primary-900);">Portal Sign In</h2>
+      <p style="font-size: 0.875rem; color: var(--text-muted); margin-top: 0.25rem;">
+        Shree Devi Institute of Technology &bull; College Notice Board
+      </p>
+    </div>
+
+    {% if error %}
+      <div style="background-color: var(--urgent-bg); border: 1px solid var(--urgent-border); color: var(--urgent-red); padding: 0.75rem 1rem; border-radius: var(--radius-sm); font-size: 0.875rem; margin-bottom: 1.25rem;">
+        {{ error }}
+      </div>
+    {% endif %}
+
+    {% if success %}
+      <div style="background-color: var(--success-bg); border: 1px solid var(--success-border); color: var(--success-green); padding: 0.75rem 1rem; border-radius: var(--radius-sm); font-size: 0.875rem; margin-bottom: 1.25rem;">
+        {{ success }}
+      </div>
+    {% endif %}
+
+    <div id="formAlert" style="display:none; padding: 0.75rem 1rem; border-radius: var(--radius-sm); font-size: 0.875rem; margin-bottom: 1.25rem;"></div>
+
+    <!-- Role selection tabs -->
+    <div class="auth-tabs" role="tablist">
+      <button type="button" class="auth-tab {% if default_role == 'student' %}active{% endif %}" id="tabStudent" onclick="switchRole('student')">
+        🎓 Student Login
+      </button>
+      <button type="button" class="auth-tab {% if default_role == 'faculty' %}active{% endif %}" id="tabFaculty" onclick="switchRole('faculty')">
+        👨‍🏫 Faculty / Admin
+      </button>
+    </div>
+
+    <form id="loginForm" onsubmit="handleLoginSubmit(event)">
+      <input type="hidden" id="roleInput" name="role" value="{{ default_role }}">
+
+      <div class="form-group">
+        <label for="emailInput" class="form-label">Email Address</label>
+        <input 
+          type="email" 
+          id="emailInput" 
+          name="email" 
+          class="form-input" 
+          placeholder="e.g. rahul.sharma@student.sdit.ac.in" 
+          required 
+          autocomplete="username"
+        >
+      </div>
+
+      <div class="form-group">
+        <label for="passwordInput" class="form-label">Password</label>
+        <div class="password-input-wrapper">
+          <input 
+            type="password" 
+            id="passwordInput" 
+            name="password" 
+            class="form-input" 
+            placeholder="Enter your account password" 
+            required 
+            autocomplete="current-password"
+          >
+          <button type="button" class="password-toggle-btn" data-target="passwordInput">Show</button>
+        </div>
+      </div>
+
+      <button type="submit" id="submitBtn" class="btn btn-primary btn-block" style="margin-top: 0.5rem; padding: 0.75rem;">
+        Sign In
+      </button>
+    </form>
+
+    <!-- Sign-up Entry Points -->
+    <div style="margin-top: 1.75rem; padding-top: 1.25rem; border-top: 1px solid var(--surface-border); font-size: 0.875rem;">
+      <div style="font-weight: 700; color: var(--primary-900); margin-bottom: 0.65rem; text-align: center;">
+        Don't have an account yet?
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+        <a href="/register/student" class="btn btn-secondary btn-sm" style="width: 100%; justify-content: center; padding: 0.55rem; color: var(--brand-blue); border-color: #bfdbfe; background: var(--brand-light);">
+          🎓 Create a student account
+        </a>
+        <a href="/register/faculty" class="btn btn-secondary btn-sm" style="width: 100%; justify-content: center; padding: 0.55rem; color: #6d28d9; border-color: #ddd6fe; background: #faf5ff;">
+          👨‍🏫 Create a faculty account
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function switchRole(role) {
+  document.getElementById("roleInput").value = role;
+  const tabStudent = document.getElementById("tabStudent");
+  const tabFaculty = document.getElementById("tabFaculty");
+  const emailInput = document.getElementById("emailInput");
+
+  if (role === "student") {
+    tabStudent.classList.add("active");
+    tabFaculty.classList.remove("active");
+    emailInput.placeholder = "e.g. rahul.sharma@student.sdit.ac.in";
+  } else {
+    tabFaculty.classList.add("active");
+    tabStudent.classList.remove("active");
+    emailInput.placeholder = "e.g. faculty.name@sdit.ac.in";
+  }
+}
+
+async function handleLoginSubmit(e) {
+  e.preventDefault();
+  const alertBox = document.getElementById("formAlert");
+  const submitBtn = document.getElementById("submitBtn");
+  alertBox.style.display = "none";
+
+  const email = document.getElementById("emailInput").value.trim();
+  const password = document.getElementById("passwordInput").value;
+  const role = document.getElementById("roleInput").value;
+
+  if (!email || !password) {
+    alertBox.style.display = "block";
+    alertBox.style.backgroundColor = "var(--urgent-bg)";
+    alertBox.style.color = "var(--urgent-red)";
+    alertBox.style.border = "1px solid var(--urgent-border)";
+    alertBox.textContent = "Please fill in all credentials.";
+    return;
+  }
+
+  submitBtn.disabled = true;
+  submitBtn.textContent = "Authenticating...";
+
+  try {
+    const res = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password, role })
+    });
+    const data = await res.json();
+
+    if (res.ok) {
+      showToast(data.message || "Signed in successfully!", "success");
+      const redirectUrl = role === "faculty" ? "/faculty" : "/student";
+      setTimeout(() => { window.location.href = redirectUrl; }, 400);
+    } else {
+      alertBox.style.display = "block";
+      alertBox.style.backgroundColor = "var(--urgent-bg)";
+      alertBox.style.color = "var(--urgent-red)";
+      alertBox.style.border = "1px solid var(--urgent-border)";
+      alertBox.textContent = data.detail || "Sign-in failed. Please check your credentials.";
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Sign In";
+    }
+  } catch (err) {
+    alertBox.style.display = "block";
+    alertBox.style.backgroundColor = "var(--urgent-bg)";
+    alertBox.style.color = "var(--urgent-red)";
+    alertBox.style.border = "1px solid var(--urgent-border)";
+    alertBox.textContent = "Network error occurred. Please try again.";
+    submitBtn.disabled = false;
+    submitBtn.textContent = "Sign In";
+  }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,285 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Notice - {{ notice.title }}{% else %}Create New Notice{% endif %}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">{% if is_edit %}Edit Notice{% else %}Create Campus Announcement{% endif %}</h1>
+    <p class="page-subtitle">Publish official notices with attachment files and schedule publication dates</p>
+  </div>
+  <a href="/faculty/notices" class="btn btn-secondary">← Back to Notices</a>
+</div>
+
+<div class="card-form">
+  <div id="formAlert" style="display:none; padding: 0.75rem 1rem; border-radius: var(--radius-sm); font-size: 0.875rem; margin-bottom: 1.5rem;"></div>
+
+  <!-- Form Tabs: Edit vs Preview -->
+  <div class="auth-tabs" style="max-width: 320px; margin-bottom: 1.75rem;">
+    <button type="button" class="auth-tab active" id="tabWrite" onclick="switchFormTab('write')">✏️ Edit Notice</button>
+    <button type="button" class="auth-tab" id="tabPreview" onclick="switchFormTab('preview')">👁️ Live Preview</button>
+  </div>
+
+  <form id="noticeForm" onsubmit="handleNoticeSubmit(event)">
+    <div id="writeSection">
+      <div class="form-group">
+        <label for="noticeTitle" class="form-label">Notice Title *</label>
+        <input 
+          type="text" 
+          id="noticeTitle" 
+          class="form-input" 
+          placeholder="e.g. End-Semester Examination Schedule Announced" 
+          required 
+          minlength="3" 
+          maxlength="200"
+          value="{{ notice.title if is_edit else '' }}"
+        >
+      </div>
+
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label for="noticeCategory" class="form-label">Category *</label>
+          <select id="noticeCategory" class="form-select" required>
+            {% set cat = notice.category if is_edit else 'Academic' %}
+            <option value="Academic" {% if cat == 'Academic' %}selected{% endif %}>Academic</option>
+            <option value="Examination" {% if cat == 'Examination' %}selected{% endif %}>Examination</option>
+            <option value="Placement" {% if cat == 'Placement' %}selected{% endif %}>Placement</option>
+            <option value="Cultural" {% if cat == 'Cultural' %}selected{% endif %}>Cultural</option>
+            <option value="Sports" {% if cat == 'Sports' %}selected{% endif %}>Sports</option>
+            <option value="Administrative" {% if cat == 'Administrative' %}selected{% endif %}>Administrative</option>
+            <option value="General" {% if cat == 'General' %}selected{% endif %}>General</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="noticePriority" class="form-label">Priority Level *</label>
+          <select id="noticePriority" class="form-select" required>
+            {% set prio = notice.priority if is_edit else 'normal' %}
+            <option value="normal" {% if prio == 'normal' %}selected{% endif %}>Normal Priority (General updates)</option>
+            <option value="important" {% if prio == 'important' %}selected{% endif %}>Important Priority (Action required)</option>
+            <option value="urgent" {% if prio == 'urgent' %}selected{% endif %}>Urgent Priority (Critical / Examination / Deadlines)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label for="publishAt" class="form-label">Publish Date & Time (Optional)</label>
+          <input 
+            type="datetime-local" 
+            id="publishAt" 
+            class="form-input"
+            value="{{ notice.publish_at[:16] if is_edit and notice.publish_at else '' }}"
+          >
+          <div class="form-help">Leave empty to publish immediately upon status activation.</div>
+        </div>
+
+        <div class="form-group">
+          <label for="expiresAt" class="form-label">Expiration Date & Time (Optional)</label>
+          <input 
+            type="datetime-local" 
+            id="expiresAt" 
+            class="form-input"
+            value="{{ notice.expires_at[:16] if is_edit and notice.expires_at else '' }}"
+          >
+          <div class="form-help">Notice will automatically hide from students after this date.</div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="noticeBody" class="form-label">Notice Body / Description *</label>
+        <textarea 
+          id="noticeBody" 
+          class="form-textarea" 
+          placeholder="Write the full announcement text, key instructions, dates, and instructions for students..." 
+          required 
+          minlength="5"
+        >{{ notice.body if is_edit else '' }}</textarea>
+      </div>
+
+      <!-- Attachment Upload -->
+      <div class="form-group" style="background-color: var(--primary-50); border: 1px solid var(--surface-border); padding: 1.25rem; border-radius: var(--radius-md);">
+        <label class="form-label">Attachment File (PDF, PNG, JPG, WEBP - Max 5MB)</label>
+        
+        {% if is_edit and notice.attachment_url %}
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.75rem; background:#fff; padding:0.6rem 0.85rem; border-radius:var(--radius-sm); border:1px solid var(--surface-border);">
+            <div style="display:flex; align-items:center; gap:0.5rem; font-size:0.875rem;">
+              <span>📎 Current:</span>
+              <a href="{{ notice.attachment_url }}" target="_blank" style="color:var(--brand-blue); font-weight:600;">
+                {{ notice.attachment_name or "Download Attachment" }}
+              </a>
+            </div>
+            <label style="display:flex; align-items:center; gap:0.35rem; font-size:0.8rem; color:var(--urgent-red); cursor:pointer;">
+              <input type="checkbox" id="removeAttachmentCheck">
+              Remove current attachment
+            </label>
+          </div>
+        {% endif %}
+
+        <input type="file" id="attachmentInput" class="form-input" accept=".pdf,image/png,image/jpeg,image/webp">
+        <div class="form-help">Optional document or timetable. Must not exceed 5 MB.</div>
+      </div>
+    </div>
+
+    <!-- Live Preview Section -->
+    <div id="previewSection" style="display: none; margin-bottom: 2rem;">
+      <div class="detail-card" style="box-shadow: none; border-color: var(--surface-border);">
+        <div class="detail-header">
+          <div style="display: flex; gap: 0.5rem; margin-bottom: 0.75rem;">
+            <span id="prevPrioBadge" class="badge badge-normal">Normal</span>
+            <span id="prevCatBadge" class="badge badge-category">Academic</span>
+            <span class="badge badge-status-published">Student Preview</span>
+          </div>
+          <h2 id="prevTitle" class="detail-title" style="font-size: 1.5rem;">Title Preview</h2>
+          <div class="detail-meta-grid">
+            <div class="detail-meta-item">✍️ Author: <strong>{{ user.name }}</strong> ({{ user.department }})</div>
+            <div class="detail-meta-item">📅 Publish Schedule: <strong id="prevDate">Immediate</strong></div>
+          </div>
+        </div>
+        <div id="prevBody" class="detail-body">Notice body will be previewed here.</div>
+      </div>
+    </div>
+
+    <!-- Submit Action Buttons -->
+    <div style="display: flex; gap: 1rem; flex-wrap: wrap; justify-content: flex-end; padding-top: 1rem; border-top: 1px solid var(--surface-border);">
+      <a href="/faculty/notices" class="btn btn-secondary">Cancel</a>
+      <button type="button" class="btn btn-secondary" onclick="submitNoticeWithStatus('draft')">
+        💾 Save as Draft
+      </button>
+      <button type="button" class="btn btn-primary" onclick="submitNoticeWithStatus('published')">
+        🚀 {% if is_edit %}Update & Publish Notice{% else %}Publish Notice Now{% endif %}
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const isEdit = {{ 'true' if is_edit else 'false' }};
+const noticeId = {{ notice.id if is_edit else 'null' }};
+
+function switchFormTab(tab) {
+  const tabWrite = document.getElementById("tabWrite");
+  const tabPreview = document.getElementById("tabPreview");
+  const writeSection = document.getElementById("writeSection");
+  const previewSection = document.getElementById("previewSection");
+
+  if (tab === "write") {
+    tabWrite.classList.add("active");
+    tabPreview.classList.remove("active");
+    writeSection.style.display = "block";
+    previewSection.style.display = "none";
+  } else {
+    // Populate preview
+    tabPreview.classList.add("active");
+    tabWrite.classList.remove("active");
+    writeSection.style.display = "none";
+    previewSection.style.display = "block";
+
+    const title = document.getElementById("noticeTitle").value || "Notice Title (Draft)";
+    const body = document.getElementById("noticeBody").value || "Notice content is empty.";
+    const cat = document.getElementById("noticeCategory").value;
+    const prio = document.getElementById("noticePriority").value;
+    const pub = document.getElementById("publishAt").value;
+
+    document.getElementById("prevTitle").textContent = title;
+    document.getElementById("prevBody").textContent = body;
+    document.getElementById("prevCatBadge").textContent = cat;
+    
+    const prioBadge = document.getElementById("prevPrioBadge");
+    prioBadge.className = `badge badge-${prio}`;
+    prioBadge.textContent = prio.charAt(0).toUpperCase() + prio.slice(1);
+    
+    document.getElementById("prevDate").textContent = pub ? pub.replace("T", " ") : "Immediately upon publishing";
+  }
+}
+
+async function submitNoticeWithStatus(status) {
+  const alertBox = document.getElementById("formAlert");
+  alertBox.style.display = "none";
+
+  const title = document.getElementById("noticeTitle").value.trim();
+  const body = document.getElementById("noticeBody").value.trim();
+  const category = document.getElementById("noticeCategory").value;
+  const priority = document.getElementById("noticePriority").value;
+  const publishAt = document.getElementById("publishAt").value;
+  const expiresAt = document.getElementById("expiresAt").value;
+  const fileInput = document.getElementById("attachmentInput");
+  const removeAttachmentCheck = document.getElementById("removeAttachmentCheck");
+
+  if (!title || title.length < 3) {
+    alertBox.style.display = "block";
+    alertBox.style.backgroundColor = "var(--urgent-bg)";
+    alertBox.style.color = "var(--urgent-red)";
+    alertBox.style.border = "1px solid var(--urgent-border)";
+    alertBox.textContent = "Please provide a valid title with at least 3 characters.";
+    switchFormTab("write");
+    return;
+  }
+
+  if (!body || body.length < 5) {
+    alertBox.style.display = "block";
+    alertBox.style.backgroundColor = "var(--urgent-bg)";
+    alertBox.style.color = "var(--urgent-red)";
+    alertBox.style.border = "1px solid var(--urgent-border)";
+    alertBox.textContent = "Please enter notice details (minimum 5 characters).";
+    switchFormTab("write");
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append("title", title);
+  formData.append("body", body);
+  formData.append("category", category);
+  formData.append("priority", priority);
+  formData.append("status", status);
+
+  if (publishAt) formData.append("publish_at", publishAt.replace("T", " ") + ":00");
+  if (expiresAt) formData.append("expires_at", expiresAt.replace("T", " ") + ":00");
+
+  if (fileInput.files.length > 0) {
+    formData.append("attachment", fileInput.files[0]);
+  }
+
+  if (isEdit && removeAttachmentCheck && removeAttachmentCheck.checked) {
+    formData.append("remove_attachment", "true");
+  }
+
+  const endpoint = isEdit ? `/api/faculty/notices/${noticeId}` : "/api/faculty/notices";
+  const method = isEdit ? "PUT" : "POST";
+
+  try {
+    const res = await fetch(endpoint, {
+      method: method,
+      body: formData
+    });
+    const data = await res.json();
+
+    if (res.ok) {
+      showToast(data.message || "Notice saved successfully!", "success");
+      setTimeout(() => { window.location.href = "/faculty/notices"; }, 500);
+    } else {
+      alertBox.style.display = "block";
+      alertBox.style.backgroundColor = "var(--urgent-bg)";
+      alertBox.style.color = "var(--urgent-red)";
+      alertBox.style.border = "1px solid var(--urgent-border)";
+      alertBox.textContent = data.detail || "Error saving notice.";
+      switchFormTab("write");
+    }
+  } catch (err) {
+    alertBox.style.display = "block";
+    alertBox.style.backgroundColor = "var(--urgent-bg)";
+    alertBox.style.color = "var(--urgent-red)";
+    alertBox.style.border = "1px solid var(--urgent-border)";
+    alertBox.textContent = "Network error while saving notice.";
+    switchFormTab("write");
+  }
+}
+
+function handleNoticeSubmit(e) {
+  e.preventDefault();
+  submitNoticeWithStatus("published");
+}
+</script>
+{% endblock %}

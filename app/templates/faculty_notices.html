@@ -1,0 +1,239 @@
+{% extends "base.html" %}
+
+{% block title %}Manage Notices - Faculty Administration{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Notice Management</h1>
+    <p class="page-subtitle">Create, review, update status, and track student readership across college circulars</p>
+  </div>
+  <a href="/faculty/notices/new" class="btn btn-primary">+ Create New Notice</a>
+</div>
+
+<!-- Filter Bar -->
+<div class="filter-bar">
+  <div class="filter-search-box">
+    <input 
+      type="text" 
+      id="searchQuery" 
+      class="filter-input" 
+      placeholder="Search notices by title or content..."
+      oninput="debounceSearch()"
+    >
+  </div>
+
+  <select id="statusFilter" class="filter-select" onchange="fetchFacultyNotices(1)">
+    <option value="all">All Statuses</option>
+    <option value="published">Published</option>
+    <option value="draft">Drafts</option>
+    <option value="archived">Archived</option>
+  </select>
+
+  <select id="categoryFilter" class="filter-select" onchange="fetchFacultyNotices(1)">
+    <option value="all">All Categories</option>
+    <option value="Academic">Academic</option>
+    <option value="Examination">Examination</option>
+    <option value="Placement">Placement</option>
+    <option value="Cultural">Cultural</option>
+    <option value="Sports">Sports</option>
+    <option value="Administrative">Administrative</option>
+    <option value="General">General</option>
+  </select>
+
+  <select id="priorityFilter" class="filter-select" onchange="fetchFacultyNotices(1)">
+    <option value="all">All Priorities</option>
+    <option value="urgent">Urgent</option>
+    <option value="important">Important</option>
+    <option value="normal">Normal</option>
+  </select>
+
+  <button class="btn btn-secondary btn-sm" onclick="resetFilters()">Reset</button>
+</div>
+
+<!-- Table Container -->
+<div class="table-container">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Title</th>
+        <th>Category</th>
+        <th>Priority</th>
+        <th>Status</th>
+        <th>Publish Schedule</th>
+        <th>Unique Readership</th>
+        <th style="text-align: right;">Actions</th>
+      </tr>
+    </thead>
+    <tbody id="facultyNoticesBody">
+      <tr>
+        <td colspan="7" style="text-align:center; padding:3rem; color:var(--text-muted);">
+          Loading notices...
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- Empty State -->
+<div id="emptyState" class="empty-state" style="display:none; margin-top:1.5rem;">
+  <div class="empty-icon">🗂</div>
+  <h3 class="empty-title">No notices found</h3>
+  <p class="empty-desc">No notices match your selected filters. Adjust your search or create a new announcement.</p>
+  <button class="btn btn-secondary btn-sm" onclick="resetFilters()">Clear Filters</button>
+</div>
+
+<!-- Pagination Controls -->
+<div id="paginationBar" style="display: none; align-items: center; justify-content: space-between; margin-top: 1.5rem;">
+  <span id="pageInfo" style="font-size: 0.85rem; color: var(--text-muted);">Page 1 of 1</span>
+  <div style="display: flex; gap: 0.5rem;">
+    <button id="prevBtn" class="btn btn-secondary btn-sm" onclick="changePage(-1)">← Previous</button>
+    <button id="nextBtn" class="btn btn-secondary btn-sm" onclick="changePage(1)">Next →</button>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentPage = 1;
+let totalPages = 1;
+let searchTimer = null;
+
+function debounceSearch() {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => {
+    fetchFacultyNotices(1);
+  }, 300);
+}
+
+function resetFilters() {
+  document.getElementById("searchQuery").value = "";
+  document.getElementById("statusFilter").value = "all";
+  document.getElementById("categoryFilter").value = "all";
+  document.getElementById("priorityFilter").value = "all";
+  fetchFacultyNotices(1);
+}
+
+function changePage(delta) {
+  const target = currentPage + delta;
+  if (target >= 1 && target <= totalPages) {
+    fetchFacultyNotices(target);
+  }
+}
+
+async function fetchFacultyNotices(page = 1) {
+  currentPage = page;
+  const q = document.getElementById("searchQuery").value.trim();
+  const status = document.getElementById("statusFilter").value;
+  const category = document.getElementById("categoryFilter").value;
+  const priority = document.getElementById("priorityFilter").value;
+
+  const tbody = document.getElementById("facultyNoticesBody");
+  const emptyState = document.getElementById("emptyState");
+  const pagination = document.getElementById("paginationBar");
+
+  emptyState.style.display = "none";
+  pagination.style.display = "none";
+
+  const params = new URLSearchParams({ page: page, page_size: 15 });
+  if (q) params.set("q", q);
+  if (status !== "all") params.set("status", status);
+  if (category !== "all") params.set("category", category);
+  if (priority !== "all") params.set("priority", priority);
+
+  try {
+    const res = await fetch(`/api/faculty/notices?${params.toString()}`);
+    const data = await res.json();
+
+    if (!res.ok) {
+      showToast(data.detail || "Failed to load notices", "error");
+      return;
+    }
+
+    totalPages = data.total_pages;
+
+    if (!data.notices || data.notices.length === 0) {
+      tbody.innerHTML = "";
+      emptyState.style.display = "block";
+      return;
+    }
+
+    tbody.innerHTML = data.notices.map(n => {
+      const priorityBadge = n.priority === 'urgent' 
+        ? `<span class="badge badge-urgent">Urgent</span>`
+        : n.priority === 'important'
+        ? `<span class="badge badge-important">Important</span>`
+        : `<span class="badge badge-normal">Normal</span>`;
+
+      const statusBadge = `<span class="badge badge-status-${n.status}">${n.status}</span>`;
+
+      const statusActions = n.status === 'draft'
+        ? `<button class="btn btn-secondary btn-sm" onclick="updateNoticeStatus(${n.id}, 'published')" title="Publish Now">Publish</button>`
+        : n.status === 'published'
+        ? `<button class="btn btn-secondary btn-sm" onclick="updateNoticeStatus(${n.id}, 'draft')" title="Unpublish to Draft">Unpublish</button>
+           <button class="btn btn-secondary btn-sm" onclick="updateNoticeStatus(${n.id}, 'archived')" title="Archive">Archive</button>`
+        : `<button class="btn btn-secondary btn-sm" onclick="updateNoticeStatus(${n.id}, 'published')" title="Restore to Published">Restore</button>`;
+
+      return `
+        <tr>
+          <td>
+            <a href="/notices/${n.id}" style="font-weight:600; color:var(--primary-900); text-decoration:none;">
+              ${escapeHtml(n.title)}
+            </a>
+            ${n.attachment_url ? '<span style="font-size:0.75rem; color:var(--brand-blue); margin-left:0.35rem;" title="Attachment Available">📎</span>' : ''}
+          </td>
+          <td><span class="badge badge-category">${n.category}</span></td>
+          <td>${priorityBadge}</td>
+          <td>${statusBadge}</td>
+          <td style="font-size:0.8rem; color:var(--text-muted);">${formatDate(n.publish_at)}</td>
+          <td>
+            <a href="/faculty/notices/${n.id}/readership" class="badge" style="background:var(--brand-light); color:var(--brand-blue); text-decoration:none; font-weight:700;">
+              👥 ${n.readership_count} readers
+            </a>
+          </td>
+          <td style="text-align: right;">
+            <div class="table-actions" style="justify-content: flex-end;">
+              ${statusActions}
+              <a href="/faculty/notices/${n.id}/edit" class="btn btn-secondary btn-sm">Edit</a>
+              <a href="/faculty/notices/${n.id}/readership" class="btn btn-primary btn-sm">Readership</a>
+              <button class="btn btn-danger btn-sm" onclick="confirmDeleteNotice(${n.id}, '${escapeAttr(n.title)}')">Delete</button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join("");
+
+    if (totalPages > 1) {
+      pagination.style.display = "flex";
+      document.getElementById("pageInfo").textContent = `Page ${data.page} of ${totalPages} (${data.total} total notices)`;
+      document.getElementById("prevBtn").disabled = (data.page <= 1);
+      document.getElementById("nextBtn").disabled = (data.page >= totalPages);
+    }
+  } catch (err) {
+    showToast("Network error while loading notices.", "error");
+  }
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return "-";
+  const d = new Date(dateStr.replace(" ", "T"));
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+function escapeHtml(str) {
+  if (!str) return "";
+  const div = document.createElement("div");
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function escapeAttr(str) {
+  if (!str) return "";
+  return str.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  fetchFacultyNotices(1);
+});
+</script>
+{% endblock %}

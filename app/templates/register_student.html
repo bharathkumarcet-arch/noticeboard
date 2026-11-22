@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+
+{% block title %}Student Registration - Shree Devi Institute of Technology{% endblock %}
+
+{% block content %}
+<div class="auth-wrapper">
+  <div class="auth-card" style="max-width: 580px;">
+    <div class="auth-header">
+      <div style="font-size: 2.25rem; margin-bottom: 0.5rem;">🎓</div>
+      <h2 style="font-size: 1.5rem; font-weight: 800; color: var(--primary-900);">Student Registration</h2>
+      <p style="font-size: 0.875rem; color: var(--text-muted); margin-top: 0.25rem;">
+        Shree Devi Institute of Technology &bull; Student Notice Board Access
+      </p>
+    </div>
+
+    {% if error %}
+      <div style="background-color: var(--urgent-bg); border: 1px solid var(--urgent-border); color: var(--urgent-red); padding: 0.75rem 1rem; border-radius: var(--radius-sm); font-size: 0.875rem; margin-bottom: 1.25rem;">
+        {{ error }}
+      </div>
+    {% endif %}
+
+    <div id="regAlert" style="display:none; padding: 0.75rem 1rem; border-radius: var(--radius-sm); font-size: 0.875rem; margin-bottom: 1.25rem;"></div>
+
+    <form id="studentRegForm" onsubmit="handleStudentRegister(event)">
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label for="nameInput" class="form-label">Full Name *</label>
+          <input type="text" id="nameInput" class="form-input" placeholder="e.g. Rahul Sharma" required minlength="2" maxlength="100">
+        </div>
+        <div class="form-group">
+          <label for="studentIdInput" class="form-label">Student ID / Registration No. *</label>
+          <input type="text" id="studentIdInput" class="form-input" placeholder="e.g. 4SD23CS045" required minlength="2" maxlength="30">
+          <div class="form-help">Your institute registration roll number / USN</div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="emailInput" class="form-label">Student Email Address *</label>
+        <input type="email" id="emailInput" class="form-input" placeholder="e.g. rahul.sharma@student.sdit.ac.in" required>
+        <div class="form-help">Institute email address or registered personal email</div>
+      </div>
+
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label for="deptInput" class="form-label">Department *</label>
+          <select id="deptInput" class="form-select" required>
+            <option value="">Select Department</option>
+            <option value="Computer Science & Engineering">Computer Science & Engineering</option>
+            <option value="Information Science & Engineering">Information Science & Engineering</option>
+            <option value="Electronics & Communication">Electronics & Communication</option>
+            <option value="Mechanical Engineering">Mechanical Engineering</option>
+            <option value="Civil Engineering">Civil Engineering</option>
+            <option value="Aeronautical Engineering">Aeronautical Engineering</option>
+            <option value="Master of Computer Applications (MCA)">Master of Computer Applications (MCA)</option>
+            <option value="Master of Business Administration (MBA)">Master of Business Administration (MBA)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="courseInput" class="form-label">Course & Year *</label>
+          <input type="text" id="courseInput" class="form-input" placeholder="e.g. B.E. CSE - 3rd Year" required>
+        </div>
+      </div>
+
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label for="passwordInput" class="form-label">Password *</label>
+          <div class="password-input-wrapper">
+            <input type="password" id="passwordInput" class="form-input" placeholder="Min. 6 characters" minlength="6" required>
+            <button type="button" class="password-toggle-btn" data-target="passwordInput">Show</button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="confirmPasswordInput" class="form-label">Confirm Password *</label>
+          <div class="password-input-wrapper">
+            <input type="password" id="confirmPasswordInput" class="form-input" placeholder="Re-type password" minlength="6" required>
+            <button type="button" class="password-toggle-btn" data-target="confirmPasswordInput">Show</button>
+          </div>
+        </div>
+      </div>
+
+      <div style="background-color: var(--primary-50); border: 1px solid var(--surface-border); padding: 0.75rem 1rem; border-radius: var(--radius-sm); font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1.25rem;">
+        🔒 <strong>Readership Compliance:</strong> Accounts are registered with the student role. Reading circulars automatically records your first-view confirmation for academic and safety records.
+      </div>
+
+      <button type="submit" id="regSubmitBtn" class="btn btn-primary btn-block" style="padding: 0.75rem;">
+        Create Student Account
+      </button>
+    </form>
+
+    <div style="margin-top: 1.5rem; padding-top: 1.25rem; border-top: 1px solid var(--surface-border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; font-size: 0.85rem; color: var(--text-muted);">
+      <div>
+        Already have an account? 
+        <a href="/login?role=student" style="color: var(--brand-blue); font-weight: 700; text-decoration: none;">Sign In</a>
+      </div>
+      <div>
+        Faculty member? 
+        <a href="/register/faculty" style="color: #7c3aed; font-weight: 600; text-decoration: none;">Faculty Signup →</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function handleStudentRegister(e) {
+  e.preventDefault();
+  const alertBox = document.getElementById("regAlert");
+  const submitBtn = document.getElementById("regSubmitBtn");
+  alertBox.style.display = "none";
+
+  const password = document.getElementById("passwordInput").value;
+  const confirm_password = document.getElementById("confirmPasswordInput").value;
+
+  if (password !== confirm_password) {
+    alertBox.style.display = "block";
+    alertBox.style.backgroundColor = "var(--urgent-bg)";
+    alertBox.style.color = "var(--urgent-red)";
+    alertBox.style.border = "1px solid var(--urgent-border)";
+    alertBox.textContent = "Passwords do not match. Please verify both password fields.";
+    return;
+  }
+
+  const payload = {
+    name: document.getElementById("nameInput").value.trim(),
+    student_id: document.getElementById("studentIdInput").value.trim(),
+    email: document.getElementById("emailInput").value.trim(),
+    department: document.getElementById("deptInput").value.trim(),
+    course: document.getElementById("courseInput").value.trim(),
+    password: password,
+    confirm_password: confirm_password
+  };
+
+  submitBtn.disabled = true;
+  submitBtn.textContent = "Creating Account...";
+
+  try {
+    const res = await fetch("/api/auth/register-student", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+
+    if (res.ok) {
+      showToast("Student account created successfully! Redirecting to notice board...", "success");
+      setTimeout(() => { window.location.href = "/student"; }, 400);
+    } else {
+      alertBox.style.display = "block";
+      alertBox.style.backgroundColor = "var(--urgent-bg)";
+      alertBox.style.color = "var(--urgent-red)";
+      alertBox.style.border = "1px solid var(--urgent-border)";
+      alertBox.textContent = data.detail || "Registration failed. Please check your details.";
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Create Student Account";
+    }
+  } catch (err) {
+    alertBox.style.display = "block";
+    alertBox.style.backgroundColor = "var(--urgent-bg)";
+    alertBox.style.color = "var(--urgent-red)";
+    alertBox.style.border = "1px solid var(--urgent-border)";
+    alertBox.textContent = "Network error. Please try again.";
+    submitBtn.disabled = false;
+    submitBtn.textContent = "Create Student Account";
+  }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}{{ app_name }}{% endblock %} - {{ college_name }}</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%231e3a8a'><path d='M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z'/></svg>">
+</head>
+<body>
+  <!-- Header / Navigation -->
+  <header class="navbar">
+    <div class="nav-container">
+      <a href="/" class="brand">
+        <div class="brand-icon">🏛</div>
+        <div class="brand-text">
+          <h1>{{ app_name }}</h1>
+          <p>{{ college_name }}</p>
+        </div>
+      </a>
+
+      <nav>
+        <ul class="nav-links">
+          {% if user %}
+            {% if user.role == 'student' %}
+              <li><a href="/student" class="nav-link {% if active_path == '/student' %}active{% endif %}">Notice Board</a></li>
+            {% elif user.role == 'faculty' %}
+              <li><a href="/faculty" class="nav-link {% if active_path == '/faculty' %}active{% endif %}">Dashboard</a></li>
+              <li><a href="/faculty/notices" class="nav-link {% if active_path.startswith('/faculty/notices') and active_path != '/faculty/notices/new' %}active{% endif %}">Manage Notices</a></li>
+              <li><a href="/faculty/notices/new" class="btn btn-primary btn-sm">+ New Notice</a></li>
+            {% endif %}
+
+            <li><a href="/privacy" class="nav-link {% if active_path == '/privacy' %}active{% endif %}">Privacy Policy</a></li>
+
+            <li>
+              <div class="user-badge">
+                <div class="user-avatar">{{ user.name[0] | upper }}</div>
+                <div class="user-meta">
+                  <span class="user-name">{{ user.name }}</span>
+                  <span class="user-role-badge role-{{ user.role }}">{{ user.role }}</span>
+                </div>
+              </div>
+            </li>
+
+            <li><a href="/profile" class="nav-link {% if active_path == '/profile' %}active{% endif %}" title="Settings & Profile">Profile</a></li>
+            <li><button class="btn btn-secondary btn-sm" onclick="handleLogout()">Sign Out</button></li>
+          {% else %}
+            <li><a href="/login" class="nav-link {% if active_path == '/login' %}active{% endif %}">Sign In</a></li>
+            <li><a href="/register/student" class="nav-link {% if active_path == '/register/student' %}active{% endif %}">Student Signup</a></li>
+            <li><a href="/register/faculty" class="btn btn-secondary btn-sm" style="color:#6d28d9; border-color:#ddd6fe; background:#faf5ff;">Faculty Signup</a></li>
+            <li><a href="/privacy" class="nav-link {% if active_path == '/privacy' %}active{% endif %}">Privacy</a></li>
+          {% endif %}
+        </ul>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Main Body Content -->
+  <main class="main-content">
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- Global Footer -->
+  <footer class="footer">
+    <div class="footer-content">
+      <div>
+        <strong>{{ app_name }}</strong> &copy; 2026 {{ college_name }}. Authorized access only.
+      </div>
+      <div>
+        <a href="/privacy" style="color:inherit;text-decoration:underline;">Readership Tracking & Compliance Privacy Notice</a>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Confirmation Modal -->
+  <div id="confirmModal" class="modal-backdrop">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="confirmModalTitle" class="modal-title">Confirm Action</h3>
+        <button class="btn btn-secondary btn-sm" onclick="closeConfirmModal()">✕</button>
+      </div>
+      <div id="confirmModalBody" class="modal-body">
+        Are you sure you want to proceed?
+      </div>
+      <div class="modal-footer">
+        <button id="confirmModalCancelBtn" class="btn btn-secondary">Cancel</button>
+        <button id="confirmModalActionBtn" class="btn btn-danger">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <script src="/static/js/app.js"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

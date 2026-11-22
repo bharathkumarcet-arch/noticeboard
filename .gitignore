@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+*.db
+test_notice_board.db
+.env
+uploads/*
+!uploads/.gitkeep
+!uploads/exam_schedule_fall2026.pdf

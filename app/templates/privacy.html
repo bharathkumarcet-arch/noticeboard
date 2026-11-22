@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block title %}Privacy Policy & Readership Tracking Disclosure{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Privacy Policy & Readership Compliance</h1>
+    <p class="page-subtitle">Transparency information regarding student notification tracking, records, and access controls</p>
+  </div>
+</div>
+
+<div class="detail-card">
+  <div style="font-size: 1.05rem; line-height: 1.8; color: var(--primary-900);">
+    <h2 style="font-size: 1.35rem; font-weight: 700; margin-bottom: 0.75rem; color: var(--brand-navy);">
+      1. Purpose of the Notice Board Readership System
+    </h2>
+    <p style="margin-bottom: 1.5rem;">
+      The <strong>{{ app_name }}</strong> facilitates timely and verifiable communication between college faculty, academic deans, administrative offices, and enrolled students. Academic regulations require colleges to verify that critical announcements (such as examination schedules, emergency safety circulars, semester registration deadlines, and disciplinary policies) have reached the student body.
+    </p>
+
+    <h2 style="font-size: 1.35rem; font-weight: 700; margin-bottom: 0.75rem; color: var(--brand-navy);">
+      2. What Readership Data is Collected
+    </h2>
+    <p style="margin-bottom: 0.75rem;">
+      When an authenticated student opens an active, published notice, the system records:
+    </p>
+    <ul style="margin-left: 1.5rem; margin-bottom: 1.5rem;">
+      <li><strong>Notice ID</strong>: Which circular was opened.</li>
+      <li><strong>Student Identifier</strong>: The authenticated student account ID, name, roll number, and department.</li>
+      <li><strong>First-View Timestamp</strong>: The exact date and time the student first opened and read the notice.</li>
+    </ul>
+
+    <div style="background-color: var(--brand-light); border: 1px solid #bfdbfe; padding: 1.25rem; border-radius: var(--radius-md); margin-bottom: 1.5rem;">
+      <h3 style="font-size: 1.05rem; font-weight: 700; color: var(--brand-blue); margin-bottom: 0.5rem;">
+        🔒 What is NOT Tracked
+      </h3>
+      <p style="font-size: 0.925rem; color: var(--primary-800); margin: 0;">
+        • <strong>No Multiple Counting:</strong> Repeated visits, page refreshes, and downloads do not increase the readership tally. Only unique students are counted once.<br>
+        • <strong>No Faculty Tracking:</strong> Views by faculty or administrators do not affect student readership counts.<br>
+        • <strong>No Unrelated Data:</strong> We do not track device biometric data, geolocation, camera access, or third-party browsing activity.
+      </p>
+    </div>
+
+    <h2 style="font-size: 1.35rem; font-weight: 700; margin-bottom: 0.75rem; color: var(--brand-navy);">
+      3. Who Has Access to Readership Data
+    </h2>
+    <p style="margin-bottom: 1.5rem;">
+      Access controls follow strict <strong>Least-Privilege Role-Based Access Control (RBAC)</strong> enforced at the database and server router levels:
+    </p>
+    <ul style="margin-left: 1.5rem; margin-bottom: 1.5rem;">
+      <li><strong>Students:</strong> Cannot view analytics, total readership numbers, or lists of which other classmates have or have not opened a notice. Students only see their own first-read confirmation badge.</li>
+      <li><strong>Faculty & Administration:</strong> Can view aggregated readership totals and first-view timestamps for audit, safety, and compliance oversight.</li>
+      <li><strong>Unauthenticated Users:</strong> Zero access to notices or readership information.</li>
+    </ul>
+
+    <h2 style="font-size: 1.35rem; font-weight: 700; margin-bottom: 0.75rem; color: var(--brand-navy);">
+      4. Attachment Security & File Verification
+    </h2>
+    <p style="margin-bottom: 1.5rem;">
+      Uploaded attachments (such as official PDF timetables and image circulars) are validated for file format and file size limits (5MB maximum) and protected by tokenized authorization checks. Students cannot download attachments from draft or expired notices.
+    </p>
+
+    <h2 style="font-size: 1.35rem; font-weight: 700; margin-bottom: 0.75rem; color: var(--brand-navy);">
+      5. Questions and Data Protection Inquiries
+    </h2>
+    <p>
+      For questions regarding your student record, enrollment validation, or privacy policy inquiries, please contact the <strong>Office of Academic Affairs</strong> at {{ college_name }}.
+    </p>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+
+{% block title %}Active Notices - Student Notice Board{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Campus Notice Board</h1>
+    <p class="page-subtitle">Official announcements, examination circulars, and departmental notifications</p>
+  </div>
+  <div style="display:flex; align-items:center; gap:0.5rem; font-size:0.85rem; color:var(--text-muted); background: #ffffff; padding: 0.4rem 0.85rem; border-radius: var(--radius-full); border: 1px solid var(--surface-border);">
+    <span style="color:var(--success-green); font-size:1.1rem;">●</span> Active Student Session: <strong>{{ user.name }}</strong> ({{ user.student_id }})
+  </div>
+</div>
+
+<!-- Search and Filter Bar -->
+<div class="filter-bar">
+  <div class="filter-search-box">
+    <input 
+      type="text" 
+      id="searchInput" 
+      class="filter-input" 
+      placeholder="Search notices by keyword, title, or topic..."
+      oninput="debounceSearch()"
+    >
+  </div>
+
+  <select id="categoryFilter" class="filter-select" onchange="fetchNotices(1)">
+    <option value="all">All Categories</option>
+    <option value="Academic">Academic</option>
+    <option value="Examination">Examination</option>
+    <option value="Placement">Placement</option>
+    <option value="Cultural">Cultural</option>
+    <option value="Sports">Sports</option>
+    <option value="Administrative">Administrative</option>
+    <option value="General">General</option>
+  </select>
+
+  <select id="priorityFilter" class="filter-select" onchange="fetchNotices(1)">
+    <option value="all">All Priorities</option>
+    <option value="urgent">Urgent Only</option>
+    <option value="important">Important Only</option>
+    <option value="normal">Normal</option>
+  </select>
+
+  <button class="btn btn-secondary btn-sm" onclick="resetFilters()">Reset Filters</button>
+</div>
+
+<!-- Notices Container -->
+<div id="noticesLoading" style="text-align: center; padding: 3rem 0; color: var(--text-muted);">
+  Loading campus notices...
+</div>
+
+<div id="noticesContainer" class="notices-list" style="display: none;"></div>
+
+<!-- Empty State -->
+<div id="emptyNoticeState" class="empty-state" style="display: none;">
+  <div class="empty-icon">📋</div>
+  <h3 class="empty-title">No notices found</h3>
+  <p class="empty-desc">No active notices match your selected search or filter criteria. Check back soon for new updates.</p>
+  <button class="btn btn-primary btn-sm" onclick="resetFilters()">View All Notices</button>
+</div>
+
+<!-- Pagination Controls -->
+<div id="paginationBar" style="display: none; align-items: center; justify-content: space-between; margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--surface-border);">
+  <span id="pageInfo" style="font-size: 0.85rem; color: var(--text-muted);">Page 1 of 1</span>
+  <div style="display: flex; gap: 0.5rem;">
+    <button id="prevPageBtn" class="btn btn-secondary btn-sm" onclick="changePage(-1)">← Previous</button>
+    <button id="nextPageBtn" class="btn btn-secondary btn-sm" onclick="changePage(1)">Next →</button>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentPage = 1;
+let totalPages = 1;
+let searchTimeout = null;
+
+function debounceSearch() {
+  clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(() => {
+    fetchNotices(1);
+  }, 300);
+}
+
+function resetFilters() {
+  document.getElementById("searchInput").value = "";
+  document.getElementById("categoryFilter").value = "all";
+  document.getElementById("priorityFilter").value = "all";
+  fetchNotices(1);
+}
+
+function changePage(delta) {
+  const target = currentPage + delta;
+  if (target >= 1 && target <= totalPages) {
+    fetchNotices(target);
+  }
+}
+
+async function fetchNotices(page = 1) {
+  currentPage = page;
+  const q = document.getElementById("searchInput").value.trim();
+  const category = document.getElementById("categoryFilter").value;
+  const priority = document.getElementById("priorityFilter").value;
+
+  const loading = document.getElementById("noticesLoading");
+  const container = document.getElementById("noticesContainer");
+  const emptyState = document.getElementById("emptyNoticeState");
+  const pagination = document.getElementById("paginationBar");
+
+  loading.style.display = "block";
+  container.style.display = "none";
+  emptyState.style.display = "none";
+  pagination.style.display = "none";
+
+  const params = new URLSearchParams({
+    page: page,
+    page_size: 8
+  });
+  if (q) params.set("q", q);
+  if (category !== "all") params.set("category", category);
+  if (priority !== "all") params.set("priority", priority);
+
+  try {
+    const res = await fetch(`/api/notices?${params.toString()}`);
+    const data = await res.json();
+    loading.style.display = "none";
+
+    if (!res.ok) {
+      showToast(data.detail || "Error loading notices", "error");
+      return;
+    }
+
+    totalPages = data.total_pages;
+
+    if (!data.notices || data.notices.length === 0) {
+      emptyState.style.display = "block";
+      return;
+    }
+
+    container.innerHTML = data.notices.map(notice => {
+      const priorityClass = `priority-${notice.priority}`;
+      const priorityBadge = notice.priority === 'urgent' 
+        ? `<span class="badge badge-urgent">🚨 Urgent</span>`
+        : notice.priority === 'important'
+        ? `<span class="badge badge-important">⚠️ Important</span>`
+        : `<span class="badge badge-normal">ℹ️ Normal</span>`;
+
+      const newBadge = notice.is_new ? `<span class="badge badge-new">✨ New</span>` : "";
+      const viewedBadge = notice.has_viewed 
+        ? `<span style="font-size:0.75rem; color:var(--text-muted);">✓ Read</span>` 
+        : `<span style="font-size:0.75rem; color:var(--brand-blue); font-weight:600;">● Unread</span>`;
+
+      const attachmentPill = notice.attachment_url 
+        ? `<span style="display:inline-flex; align-items:center; gap:0.25rem; font-size:0.75rem; background:var(--brand-light); color:var(--brand-blue); padding:0.15rem 0.45rem; border-radius:4px; font-weight:500;">📎 Attachment</span>` 
+        : "";
+
+      return `
+        <article class="notice-card ${priorityClass}">
+          <div class="notice-card-header">
+            <div class="notice-badges">
+              ${priorityBadge}
+              ${newBadge}
+              <span class="badge badge-category">${notice.category}</span>
+              ${attachmentPill}
+            </div>
+            <div>${viewedBadge}</div>
+          </div>
+
+          <a href="/notices/${notice.id}" class="notice-card-title">${escapeHtml(notice.title)}</a>
+          <p class="notice-summary">${escapeHtml(notice.summary)}</p>
+
+          <div class="notice-card-footer">
+            <div class="notice-meta-author">
+              <span>✍️ Issued by: <strong>${escapeHtml(notice.author_name)}</strong> (${escapeHtml(notice.author_department)})</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:0.75rem;">
+              <span>📅 ${formatDate(notice.publish_at)}</span>
+              <a href="/notices/${notice.id}" class="btn btn-secondary btn-sm">Read Notice →</a>
+            </div>
+          </div>
+        </article>
+      `;
+    }).join("");
+
+    container.style.display = "flex";
+
+    if (totalPages > 1) {
+      pagination.style.display = "flex";
+      document.getElementById("pageInfo").textContent = `Page ${data.page} of ${totalPages} (${data.total} total notices)`;
+      document.getElementById("prevPageBtn").disabled = (data.page <= 1);
+      document.getElementById("nextPageBtn").disabled = (data.page >= totalPages);
+    }
+  } catch (err) {
+    loading.style.display = "none";
+    showToast("Failed to fetch notices. Please check your connection.", "error");
+  }
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return "";
+  const d = new Date(dateStr.replace(" ", "T"));
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+function escapeHtml(str) {
+  if (!str) return "";
+  const div = document.createElement("div");
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  fetchNotices(1);
+});
+</script>
+{% endblock %}

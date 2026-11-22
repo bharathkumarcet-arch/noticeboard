@@ -1,0 +1,217 @@
+from fastapi import APIRouter, Depends, HTTPException, Response, status
+import sqlite3
+
+from app.database import get_db
+from app.models import UserLogin, UserCreateStudent, UserCreateFaculty, PasswordChange
+from app.security import (
+    hash_password,
+    verify_password,
+    create_session_token,
+    get_current_user,
+    settings
+)
+
+router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+@router.post("/login")
+def login(data: UserLogin, response: Response, conn: sqlite3.Connection = Depends(get_db)):
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id, name, email, password_hash, role, department, course, student_id, is_approved FROM users WHERE email = ? COLLATE NOCASE",
+        (data.email,)
+    )
+    user = cursor.fetchone()
+    
+    if not user or not verify_password(data.password, user["password_hash"]):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password."
+        )
+        
+    if user["role"] != data.role:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"This account is not registered as a {data.role}. Please switch to the {user['role'].title()} tab."
+        )
+        
+    token = create_session_token(user["id"], user["role"])
+    
+    response.set_cookie(
+        key=settings.SESSION_COOKIE_NAME,
+        value=token,
+        max_age=settings.SESSION_MAX_AGE_SECONDS,
+        httponly=True,
+        secure=settings.COOKIE_SECURE,
+        samesite=settings.COOKIE_SAMESITE,
+        path="/"
+    )
+    
+    is_appr = bool(user["is_approved"] if "is_approved" in user.keys() else 1)
+    
+    return {
+        "success": True,
+        "message": f"Welcome back, {user['name']}!",
+        "user": {
+            "id": user["id"],
+            "name": user["name"],
+            "email": user["email"],
+            "role": user["role"],
+            "department": user["department"],
+            "course": user["course"],
+            "student_id": user["student_id"],
+            "is_approved": is_appr
+        }
+    }
+
+@router.post("/register-student", status_code=status.HTTP_201_CREATED)
+def register_student(data: UserCreateStudent, response: Response, conn: sqlite3.Connection = Depends(get_db)):
+    if data.confirm_password and data.confirm_password != data.password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password and confirm password do not match."
+        )
+
+    cursor = conn.cursor()
+    cursor.execute("SELECT id FROM users WHERE email = ? COLLATE NOCASE", (data.email,))
+    if cursor.fetchone():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An account with this email address already exists."
+        )
+        
+    cursor.execute("SELECT id FROM users WHERE student_id = ?", (data.student_id.strip(),))
+    if cursor.fetchone():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A student with this Student ID or registration number is already registered."
+        )
+        
+    pw_hash = hash_password(data.password)
+    cursor.execute(
+        """
+        INSERT INTO users (name, email, password_hash, role, department, course, student_id, is_approved)
+        VALUES (?, ?, ?, 'student', ?, ?, ?, 1)
+        """,
+        (data.name.strip(), data.email.strip().lower(), pw_hash, data.department.strip(), data.course.strip(), data.student_id.strip())
+    )
+    conn.commit()
+    user_id = cursor.lastrowid
+    
+    # Auto-login the newly registered student
+    token = create_session_token(user_id, "student")
+    response.set_cookie(
+        key=settings.SESSION_COOKIE_NAME,
+        value=token,
+        max_age=settings.SESSION_MAX_AGE_SECONDS,
+        httponly=True,
+        secure=settings.COOKIE_SECURE,
+        samesite=settings.COOKIE_SAMESITE,
+        path="/"
+    )
+    
+    return {
+        "success": True,
+        "message": "Student account registered successfully.",
+        "user": {
+            "id": user_id,
+            "name": data.name,
+            "email": data.email,
+            "role": "student",
+            "department": data.department,
+            "course": data.course,
+            "student_id": data.student_id,
+            "is_approved": True
+        }
+    }
+
+@router.post("/register-faculty", status_code=status.HTTP_201_CREATED)
+def register_faculty(data: UserCreateFaculty, response: Response, conn: sqlite3.Connection = Depends(get_db)):
+    if data.confirm_password and data.confirm_password != data.password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password and confirm password do not match."
+        )
+
+    cursor = conn.cursor()
+    cursor.execute("SELECT id FROM users WHERE email = ? COLLATE NOCASE", (data.email,))
+    if cursor.fetchone():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An account with this institutional email address already exists."
+        )
+        
+    # Verify invitation code or mark pending approval
+    # If invitation code matches settings.FACULTY_INVITE_CODE: approved immediately
+    # If not matching or not provided, mark is_approved = 0 (pending admin approval)
+    provided_code = (data.invite_code or "").strip()
+    is_approved = 1 if (provided_code and provided_code == settings.FACULTY_INVITE_CODE) else 0
+
+    pw_hash = hash_password(data.password)
+    cursor.execute(
+        """
+        INSERT INTO users (name, email, password_hash, role, department, is_approved)
+        VALUES (?, ?, ?, 'faculty', ?, ?)
+        """,
+        (data.name.strip(), data.email.strip().lower(), pw_hash, data.department.strip(), is_approved)
+    )
+    conn.commit()
+    user_id = cursor.lastrowid
+    
+    # Auto-login the newly registered faculty
+    token = create_session_token(user_id, "faculty")
+    response.set_cookie(
+        key=settings.SESSION_COOKIE_NAME,
+        value=token,
+        max_age=settings.SESSION_MAX_AGE_SECONDS,
+        httponly=True,
+        secure=settings.COOKIE_SECURE,
+        samesite=settings.COOKIE_SAMESITE,
+        path="/"
+    )
+    
+    msg = (
+        "Faculty account registered and verified with invitation code." 
+        if is_approved 
+        else "Faculty account registered. Your account is pending administrative approval before publishing notices."
+    )
+    
+    return {
+        "success": True,
+        "message": msg,
+        "is_approved": bool(is_approved),
+        "user": {
+            "id": user_id,
+            "name": data.name,
+            "email": data.email,
+            "role": "faculty",
+            "department": data.department,
+            "is_approved": bool(is_approved)
+        }
+    }
+
+@router.post("/logout")
+def logout(response: Response):
+    response.delete_cookie(
+        key=settings.SESSION_COOKIE_NAME,
+        path="/"
+    )
+    return {"success": True, "message": "Signed out successfully."}
+
+@router.get("/me")
+def get_current_user_profile(user: dict = Depends(get_current_user)):
+    return {"success": True, "user": user}
+
+@router.post("/change-password")
+def change_password(data: PasswordChange, user: dict = Depends(get_current_user), conn: sqlite3.Connection = Depends(get_db)):
+    cursor = conn.cursor()
+    cursor.execute("SELECT password_hash FROM users WHERE id = ?", (user["id"],))
+    row = cursor.fetchone()
+    
+    if not row or not verify_password(data.current_password, row["password_hash"]):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password does not match.")
+        
+    new_hash = hash_password(data.new_password)
+    cursor.execute("UPDATE users SET password_hash = ? WHERE id = ?", (new_hash, user["id"]))
+    conn.commit()
+    
+    return {"success": True, "message": "Password changed successfully."}

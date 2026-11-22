@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+
+{% block title %}Faculty Registration - Shree Devi Institute of Technology{% endblock %}
+
+{% block content %}
+<div class="auth-wrapper">
+  <div class="auth-card" style="max-width: 580px;">
+    <div class="auth-header">
+      <div style="font-size: 2.25rem; margin-bottom: 0.5rem;">👨‍🏫</div>
+      <h2 style="font-size: 1.5rem; font-weight: 800; color: var(--primary-900);">Faculty & Staff Registration</h2>
+      <p style="font-size: 0.875rem; color: var(--text-muted); margin-top: 0.25rem;">
+        Shree Devi Institute of Technology &bull; Faculty Notice Administration
+      </p>
+    </div>
+
+    {% if error %}
+      <div style="background-color: var(--urgent-bg); border: 1px solid var(--urgent-border); color: var(--urgent-red); padding: 0.75rem 1rem; border-radius: var(--radius-sm); font-size: 0.875rem; margin-bottom: 1.25rem;">
+        {{ error }}
+      </div>
+    {% endif %}
+
+    <div id="facultyRegAlert" style="display:none; padding: 0.75rem 1rem; border-radius: var(--radius-sm); font-size: 0.875rem; margin-bottom: 1.25rem;"></div>
+
+    <form id="facultyRegForm" onsubmit="handleFacultyRegister(event)">
+      <div class="form-group">
+        <label for="nameInput" class="form-label">Full Name & Title *</label>
+        <input type="text" id="nameInput" class="form-input" placeholder="e.g. Dr. Rajesh Bhat / Prof. Sunita Rao" required minlength="2" maxlength="100">
+      </div>
+
+      <div class="form-group">
+        <label for="emailInput" class="form-label">Official Institute Email Address *</label>
+        <input type="email" id="emailInput" class="form-input" placeholder="e.g. rajesh.bhat@sdit.ac.in" required>
+        <div class="form-help">Use your official Shree Devi Institute of Technology institutional email</div>
+      </div>
+
+      <div class="form-group">
+        <label for="deptInput" class="form-label">Department / Academic Unit *</label>
+        <select id="deptInput" class="form-select" required>
+          <option value="">Select Academic Department</option>
+          <option value="Computer Science & Engineering">Computer Science & Engineering</option>
+          <option value="Information Science & Engineering">Information Science & Engineering</option>
+          <option value="Electronics & Communication Engineering">Electronics & Communication Engineering</option>
+          <option value="Mechanical Engineering">Mechanical Engineering</option>
+          <option value="Civil Engineering">Civil Engineering</option>
+          <option value="Aeronautical Engineering">Aeronautical Engineering</option>
+          <option value="Department of Management Studies (MBA)">Department of Management Studies (MBA)</option>
+          <option value="Department of Computer Applications (MCA)">Department of Computer Applications (MCA)</option>
+          <option value="Training & Placement Cell">Training & Placement Cell</option>
+          <option value="Controller of Examinations (CoE)">Controller of Examinations (CoE)</option>
+          <option value="Dean - Academic Affairs">Dean - Academic Affairs</option>
+        </select>
+      </div>
+
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label for="passwordInput" class="form-label">Password *</label>
+          <div class="password-input-wrapper">
+            <input type="password" id="passwordInput" class="form-input" placeholder="Min. 8 characters" minlength="8" required>
+            <button type="button" class="password-toggle-btn" data-target="passwordInput">Show</button>
+          </div>
+          <div class="form-help">At least 8 characters</div>
+        </div>
+
+        <div class="form-group">
+          <label for="confirmPasswordInput" class="form-label">Confirm Password *</label>
+          <div class="password-input-wrapper">
+            <input type="password" id="confirmPasswordInput" class="form-input" placeholder="Re-type password" minlength="8" required>
+            <button type="button" class="password-toggle-btn" data-target="confirmPasswordInput">Show</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Institute Faculty Invitation Code -->
+      <div class="form-group" style="background-color: #faf5ff; border: 1px solid #e9d5ff; padding: 1.15rem; border-radius: var(--radius-md);">
+        <label for="inviteCodeInput" class="form-label" style="color: #6d28d9; font-weight: 700;">
+          🔑 Institute Faculty Invitation Code
+        </label>
+        <input 
+          type="text" 
+          id="inviteCodeInput" 
+          class="form-input" 
+          placeholder="e.g. SDIT-FACULTY-2026"
+          style="background:#fff; border-color: #c4b5fd;"
+        >
+        <div class="form-help" style="color: #6b21a8; margin-top: 0.35rem;">
+          Enter the secret code issued by Shree Devi Institute of Technology administration for instant publishing verification. If you do not have the code yet, leave blank to submit your account for manual administration approval.
+        </div>
+      </div>
+
+      <button type="submit" id="facultyRegSubmitBtn" class="btn btn-primary btn-block" style="padding: 0.75rem; background: #6d28d9; border-color: #5b21b6;">
+        Register Faculty Account
+      </button>
+    </form>
+
+    <div style="margin-top: 1.5rem; padding-top: 1.25rem; border-top: 1px solid var(--surface-border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; font-size: 0.85rem; color: var(--text-muted);">
+      <div>
+        Already have a faculty account? 
+        <a href="/login?role=faculty" style="color: var(--brand-blue); font-weight: 700; text-decoration: none;">Sign In</a>
+      </div>
+      <div>
+        Student? 
+        <a href="/register/student" style="color: var(--brand-blue); font-weight: 600; text-decoration: none;">Student Signup →</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function handleFacultyRegister(e) {
+  e.preventDefault();
+  const alertBox = document.getElementById("facultyRegAlert");
+  const submitBtn = document.getElementById("facultyRegSubmitBtn");
+  alertBox.style.display = "none";
+
+  const password = document.getElementById("passwordInput").value;
+  const confirm_password = document.getElementById("confirmPasswordInput").value;
+
+  if (password.length < 8) {
+    alertBox.style.display = "block";
+    alertBox.style.backgroundColor = "var(--urgent-bg)";
+    alertBox.style.color = "var(--urgent-red)";
+    alertBox.style.border = "1px solid var(--urgent-border)";
+    alertBox.textContent = "Faculty password must be at least 8 characters long.";
+    return;
+  }
+
+  if (password !== confirm_password) {
+    alertBox.style.display = "block";
+    alertBox.style.backgroundColor = "var(--urgent-bg)";
+    alertBox.style.color = "var(--urgent-red)";
+    alertBox.style.border = "1px solid var(--urgent-border)";
+    alertBox.textContent = "Passwords do not match. Please verify both password fields.";
+    return;
+  }
+
+  const payload = {
+    name: document.getElementById("nameInput").value.trim(),
+    email: document.getElementById("emailInput").value.trim(),
+    department: document.getElementById("deptInput").value.trim(),
+    password: password,
+    confirm_password: confirm_password,
+    invite_code: document.getElementById("inviteCodeInput").value.trim()
+  };
+
+  submitBtn.disabled = true;
+  submitBtn.textContent = "Registering Account...";
+
+  try {
+    const res = await fetch("/api/auth/register-faculty", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+
+    if (res.ok) {
+      if (data.is_approved) {
+        showToast("Faculty account verified and activated! Redirecting to dashboard...", "success");
+        setTimeout(() => { window.location.href = "/faculty"; }, 500);
+      } else {
+        showToast("Faculty account registered! Pending administrative verification.", "info");
+        setTimeout(() => { 
+          window.location.href = "/faculty?warning=Your+faculty+account+has+been+registered+and+is+pending+administrative+approval.+Publishing+features+will+unlock+once+approved."; 
+        }, 500);
+      }
+    } else {
+      alertBox.style.display = "block";
+      alertBox.style.backgroundColor = "var(--urgent-bg)";
+      alertBox.style.color = "var(--urgent-red)";
+      alertBox.style.border = "1px solid var(--urgent-border)";
+      alertBox.textContent = data.detail || "Faculty registration failed.";
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Register Faculty Account";
+    }
+  } catch (err) {
+    alertBox.style.display = "block";
+    alertBox.style.backgroundColor = "var(--urgent-bg)";
+    alertBox.style.color = "var(--urgent-red)";
+    alertBox.style.border = "1px solid var(--urgent-border)";
+    alertBox.textContent = "Network error occurred. Please try again.";
+    submitBtn.disabled = false;
+    submitBtn.textContent = "Register Faculty Account";
+  }
+}
+</script>
+{% endblock %}

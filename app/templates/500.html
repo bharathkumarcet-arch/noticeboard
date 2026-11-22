@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block title %}Server Error (500) - {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="empty-state" style="max-width: 580px; margin: 4rem auto; border-color: var(--urgent-border);">
+  <div class="empty-icon" style="color: var(--urgent-red);">⚠️</div>
+  <h2 class="empty-title" style="color: var(--urgent-red);">Unexpected Server Error</h2>
+  <p class="empty-desc">
+    An unexpected error occurred while processing your request. Please return to the homepage or sign in again.
+  </p>
+  {% if error %}
+    <div style="background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; padding: 0.65rem 1rem; border-radius: var(--radius-sm); font-size: 0.8rem; margin: 1rem auto; max-width: 450px; word-break: break-all;">
+      <code>{{ error }}</code>
+    </div>
+  {% endif %}
+  <div style="display: flex; gap: 0.75rem; justify-content: center; margin-top: 1rem;">
+    <a href="/login" class="btn btn-primary">Return to Sign In</a>
+    <a href="/" class="btn btn-secondary">Go to Homepage</a>
+  </div>
+</div>
+{% endblock %}

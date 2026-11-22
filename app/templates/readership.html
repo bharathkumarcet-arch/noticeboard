@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+
+{% block title %}Readership Analytics - {{ notice.title }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Readership Analytics</h1>
+    <p class="page-subtitle">Unique student engagement audit and verification records</p>
+  </div>
+  <div style="display:flex; gap:0.5rem;">
+    <a href="/faculty/notices" class="btn btn-secondary btn-sm">← Back to Notices</a>
+    <a href="/notices/{{ notice.id }}" class="btn btn-primary btn-sm">View Notice</a>
+  </div>
+</div>
+
+<!-- Notice Summary Card -->
+<div class="metric-card" style="margin-bottom: 2rem;">
+  <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem; margin-bottom: 1rem;">
+    <div>
+      <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
+        <span class="badge badge-category">{{ notice.category }}</span>
+        {% if notice.priority == 'urgent' %}
+          <span class="badge badge-urgent">Urgent</span>
+        {% elif notice.priority == 'important' %}
+          <span class="badge badge-important">Important</span>
+        {% else %}
+          <span class="badge badge-normal">Normal</span>
+        {% endif %}
+        <span class="badge badge-status-{{ notice.status }}">{{ notice.status | capitalize }}</span>
+      </div>
+      <h2 style="font-size: 1.35rem; font-weight: 700; color: var(--primary-900);">
+        {{ notice.title }}
+      </h2>
+      <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.35rem;">
+        Published on <strong>{{ notice.publish_at }}</strong> &bull; Author: <strong>{{ notice.author_name }}</strong>
+      </div>
+    </div>
+
+    <!-- Unique Readers Stat Box -->
+    <div style="background: var(--brand-light); border: 1px solid #bfdbfe; border-radius: var(--radius-md); padding: 1rem 1.5rem; text-align: center; min-width: 170px;">
+      <div style="font-size: 0.75rem; font-weight: 700; color: var(--brand-blue); text-transform: uppercase;">Unique Student Readers</div>
+      <div style="font-size: 2.25rem; font-weight: 800; color: var(--primary-900); line-height: 1.1; margin-top: 0.25rem;">
+        {{ total_readers }}
+      </div>
+      <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem;">Enrolled Students</div>
+    </div>
+  </div>
+</div>
+
+<!-- Privacy Compliance Notice -->
+<div style="background: #ffffff; border: 1px solid var(--surface-border); border-left: 4px solid var(--brand-blue); padding: 1rem 1.25rem; border-radius: var(--radius-sm); margin-bottom: 1.75rem; font-size: 0.85rem; color: var(--primary-700);">
+  <strong>📋 Readership Tracking Policy:</strong>
+  In accordance with institutional accreditation and student notification guidelines, this record tracks first-time access by enrolled students for critical college circulars. Page refreshes and repeated visits do not increment the count. This view is strictly restricted to verified faculty and administration.
+</div>
+
+<!-- Search within readership -->
+<div class="filter-bar" style="margin-bottom: 1rem;">
+  <div class="filter-search-box">
+    <input 
+      type="text" 
+      id="readerSearch" 
+      class="filter-input" 
+      placeholder="Filter readership list by student name, roll number, or department..."
+      oninput="filterReaderTable()"
+    >
+  </div>
+  <div style="font-size: 0.85rem; color: var(--text-muted);">
+    Showing <strong id="visibleCount">{{ total_readers }}</strong> of {{ total_readers }} student records
+  </div>
+</div>
+
+<!-- Readership Table -->
+{% if total_readers > 0 %}
+  <div class="table-container">
+    <table class="data-table" id="readershipTable">
+      <thead>
+        <tr>
+          <th>Student Name</th>
+          <th>Student ID / Roll No.</th>
+          <th>Department</th>
+          <th>Course</th>
+          <th>Institutional Email</th>
+          <th>First Acknowledged Date & Time</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for v in views %}
+          <tr class="reader-row">
+            <td style="font-weight: 600; color: var(--primary-900);">
+              🎓 {{ v.student_name }}
+            </td>
+            <td><code style="background:var(--primary-100); padding:0.15rem 0.4rem; border-radius:4px; font-size:0.8rem;">{{ v.student_id }}</code></td>
+            <td>{{ v.department }}</td>
+            <td>{{ v.course }}</td>
+            <td style="color: var(--text-muted);">{{ v.student_email }}</td>
+            <td style="font-size: 0.825rem; font-weight: 600; color: var(--primary-800);">
+              🕒 {{ v.first_viewed_at }}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  <div class="empty-state">
+    <div class="empty-icon">👥</div>
+    <h3 class="empty-title">No student reads logged yet</h3>
+    <p class="empty-desc">
+      None of the registered students have opened this notice yet. When an enrolled student clicks and reads this announcement, their first view timestamp will appear here automatically.
+    </p>
+  </div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+function filterReaderTable() {
+  const query = document.getElementById("readerSearch").value.toLowerCase().trim();
+  const rows = document.querySelectorAll(".reader-row");
+  let visible = 0;
+
+  rows.forEach(row => {
+    const text = row.textContent.toLowerCase();
+    if (!query || text.includes(query)) {
+      row.style.display = "";
+      visible++;
+    } else {
+      row.style.display = "none";
+    }
+  });
+
+  const countEl = document.getElementById("visibleCount");
+  if (countEl) countEl.textContent = visible;
+}
+</script>
+{% endblock %}

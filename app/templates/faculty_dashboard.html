@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+
+{% block title %}Faculty Dashboard - Notice Management{% endblock %}
+
+{% block content %}
+{% if warning or (user and not user.is_approved) %}
+  <div style="background-color: #fffbeb; border: 1px solid #fde68a; border-left: 5px solid #d97706; color: #92400e; padding: 1.15rem 1.35rem; border-radius: var(--radius-md); font-size: 0.925rem; margin-bottom: 1.75rem; display: flex; align-items: flex-start; gap: 0.85rem; box-shadow: var(--shadow-sm);">
+    <div style="font-size: 1.5rem; line-height: 1;">⚠️</div>
+    <div>
+      <strong style="font-size: 1rem; color: #78350f; display: block; margin-bottom: 0.25rem;">
+        Faculty Account Pending Administrative Approval
+      </strong>
+      {{ warning or "Your account has been registered under the faculty role and is currently pending verification by Shree Devi Institute of Technology administration. You can view existing circulars, but creating, editing, and readership tracking are restricted until approved." }}
+    </div>
+  </div>
+{% endif %}
+
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Faculty & Administration Dashboard</h1>
+    <p class="page-subtitle">Publish circulars, monitor student engagement, and oversee campus communications</p>
+  </div>
+  <div style="display:flex; gap:0.75rem;">
+    <a href="/faculty/notices" class="btn btn-secondary">All Notices</a>
+    {% if user and user.is_approved %}
+      <a href="/faculty/notices/new" class="btn btn-primary">+ Create Notice</a>
+    {% else %}
+      <button class="btn btn-secondary" disabled title="Pending Admin Approval" style="opacity: 0.6; cursor: not-allowed;">+ Create Notice (Pending)</button>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Metrics Cards -->
+<div class="metrics-grid">
+  <div class="metric-card">
+    <div class="metric-header">
+      <span>Published Notices</span>
+      <div class="metric-icon" style="background:var(--success-bg); color:var(--success-green);">📢</div>
+    </div>
+    <div class="metric-value" id="valPublished">-</div>
+    <div class="metric-desc" id="valActiveDesc">Loading...</div>
+  </div>
+
+  <div class="metric-card">
+    <div class="metric-header">
+      <span>Draft Notices</span>
+      <div class="metric-icon" style="background:var(--important-bg); color:var(--important-amber);">📝</div>
+    </div>
+    <div class="metric-value" id="valDraft">-</div>
+    <div class="metric-desc">Unpublished working copies</div>
+  </div>
+
+  <div class="metric-card">
+    <div class="metric-header">
+      <span>Archived Notices</span>
+      <div class="metric-icon" style="background:var(--primary-100); color:var(--primary-600);">📁</div>
+    </div>
+    <div class="metric-value" id="valArchived">-</div>
+    <div class="metric-desc">Past historical circulars</div>
+  </div>
+
+  <div class="metric-card">
+    <div class="metric-header">
+      <span>Student Readership</span>
+      <div class="metric-icon" style="background:var(--brand-light); color:var(--brand-blue);">👥</div>
+    </div>
+    <div class="metric-value" id="valReads">-</div>
+    <div class="metric-desc">Unique student views logged</div>
+  </div>
+</div>
+
+<!-- Recent Notices Section -->
+<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+  <h2 style="font-size:1.25rem; font-weight:700; color:var(--primary-900);">Recent Circulars & Student Engagement</h2>
+  <a href="/faculty/notices" style="font-size:0.875rem; color:var(--brand-blue); text-decoration:none; font-weight:600;">View All Notices →</a>
+</div>
+
+<div class="table-container">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Notice Title</th>
+        <th>Category</th>
+        <th>Priority</th>
+        <th>Status</th>
+        <th>Publish Date</th>
+        <th>Unique Readers</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody id="recentNoticesTableBody">
+      <tr>
+        <td colspan="7" style="text-align:center; padding:2rem; color:var(--text-muted);">
+          Loading recent notices...
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function loadFacultyDashboard() {
+  try {
+    // 1. Load metrics
+    const metricsRes = await fetch("/api/faculty/metrics");
+    const metricsData = await metricsRes.json();
+    if (metricsRes.ok && metricsData.metrics) {
+      const m = metricsData.metrics;
+      document.getElementById("valPublished").textContent = m.total_published || 0;
+      document.getElementById("valDraft").textContent = m.total_draft || 0;
+      document.getElementById("valArchived").textContent = m.total_archived || 0;
+      document.getElementById("valReads").textContent = m.total_views || 0;
+      document.getElementById("valActiveDesc").textContent = `${m.total_active || 0} currently visible to students`;
+    }
+
+    // 2. Load recent notices
+    const noticesRes = await fetch("/api/faculty/notices?page=1&page_size=6");
+    const noticesData = await noticesRes.json();
+    const tbody = document.getElementById("recentNoticesTableBody");
+
+    if (noticesRes.ok && noticesData.notices) {
+      if (noticesData.notices.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="7" style="text-align:center; padding:3rem; color:var(--text-muted);">
+              No notices published yet. Click <strong>+ Create Notice</strong> to publish your first announcement.
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      tbody.innerHTML = noticesData.notices.map(n => {
+        const priorityBadge = n.priority === 'urgent' 
+          ? `<span class="badge badge-urgent">Urgent</span>`
+          : n.priority === 'important'
+          ? `<span class="badge badge-important">Important</span>`
+          : `<span class="badge badge-normal">Normal</span>`;
+
+        const statusBadge = `<span class="badge badge-status-${n.status}">${n.status}</span>`;
+
+        return `
+          <tr>
+            <td>
+              <a href="/notices/${n.id}" style="font-weight:600; color:var(--primary-900); text-decoration:none;">
+                ${escapeHtml(n.title)}
+              </a>
+              ${n.attachment_url ? '<span style="font-size:0.75rem; color:var(--brand-blue); margin-left:0.35rem;">📎</span>' : ''}
+            </td>
+            <td><span class="badge badge-category">${n.category}</span></td>
+            <td>${priorityBadge}</td>
+            <td>${statusBadge}</td>
+            <td style="font-size:0.8rem; color:var(--text-muted);">${formatDate(n.publish_at)}</td>
+            <td>
+              <a href="/faculty/notices/${n.id}/readership" class="badge" style="background:var(--brand-light); color:var(--brand-blue); text-decoration:none; font-weight:700;">
+                👥 ${n.readership_count} unique readers
+              </a>
+            </td>
+            <td>
+              <div class="table-actions">
+                <a href="/notices/${n.id}" class="btn btn-secondary btn-sm" title="View Notice">View</a>
+                <a href="/faculty/notices/${n.id}/edit" class="btn btn-secondary btn-sm" title="Edit Notice">Edit</a>
+                <a href="/faculty/notices/${n.id}/readership" class="btn btn-primary btn-sm" title="Analytics">Analytics</a>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join("");
+    }
+  } catch (err) {
+    showToast("Error loading dashboard data", "error");
+  }
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return "-";
+  const d = new Date(dateStr.replace(" ", "T"));
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+function escapeHtml(str) {
+  if (!str) return "";
+  const div = document.createElement("div");
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+document.addEventListener("DOMContentLoaded", loadFacultyDashboard);
+</script>
+{% endblock %}

@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block title %}Access Denied (403){% endblock %}
+
+{% block content %}
+<div class="empty-state" style="max-width: 540px; margin: 4rem auto; border-color: var(--urgent-border);">
+  <div class="empty-icon" style="color: var(--urgent-red);">🚫</div>
+  <h2 class="empty-title" style="color: var(--urgent-red);">Access Restricted</h2>
+  <p class="empty-desc">
+    {{ error or "You do not have administrative permission to view this notice or access this portal area." }}
+  </p>
+  <div style="display: flex; gap: 0.75rem; justify-content: center;">
+    <a href="/" class="btn btn-primary">Go to Dashboard</a>
+    <a href="/privacy" class="btn btn-secondary">Read Privacy Policy</a>
+  </div>
+</div>
+{% endblock %}
