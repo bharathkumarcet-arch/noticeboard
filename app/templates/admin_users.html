@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+
+{% block title %}User Approvals & Account Management - Shree Devi Institute of Technology{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 1200px; margin: 2rem auto; padding: 0 1rem;">
+  <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem;">
+    <div>
+      <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem;">
+        <span style="font-size: 1.5rem;">🛡️</span>
+        <h2 style="font-size: 1.75rem; font-weight: 800; color: var(--primary-900); margin: 0;">Institutional Account Management</h2>
+      </div>
+      <p style="color: var(--text-muted); font-size: 0.875rem; margin: 0;">
+        Shree Devi Institute of Technology &bull; Faculty Approvals, Role Control & Account Status
+      </p>
+    </div>
+    <div>
+      <a href="/faculty" class="btn btn-secondary btn-sm">&larr; Back to Dashboard</a>
+    </div>
+  </div>
+
+  <!-- Role Filter Bar -->
+  <div style="background: white; border: 1px solid var(--surface-border); border-radius: var(--radius-md); padding: 1rem; margin-bottom: 1.5rem; display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+    <span style="font-weight: 600; font-size: 0.875rem; color: var(--primary-800);">Filter Accounts:</span>
+    <button type="button" class="btn btn-sm btn-primary" id="filterAll" onclick="setFilter('all')">All Users</button>
+    <button type="button" class="btn btn-sm btn-secondary" id="filterFaculty" onclick="setFilter('faculty')">Faculty Only</button>
+    <button type="button" class="btn btn-sm btn-secondary" id="filterStudent" onclick="setFilter('student')">Students Only</button>
+    <button type="button" class="btn btn-sm btn-secondary" id="filterPending" onclick="setFilter('pending')">Pending Approval Only</button>
+    <span id="userCountBadge" style="margin-left: auto; font-size: 0.8125rem; color: var(--text-muted);"></span>
+  </div>
+
+  <div id="statusAlert" style="display:none; padding: 0.75rem 1rem; border-radius: var(--radius-sm); font-size: 0.875rem; margin-bottom: 1.25rem;"></div>
+
+  <!-- Accounts Table Card -->
+  <div class="card" style="padding: 0; overflow: hidden;">
+    <div style="overflow-x: auto;">
+      <table class="table" style="width: 100%; margin: 0; border-collapse: collapse;">
+        <thead>
+          <tr style="background: var(--surface-muted); border-bottom: 1px solid var(--surface-border); text-align: left;">
+            <th style="padding: 0.85rem 1rem; font-size: 0.8125rem; font-weight: 700; color: var(--primary-800);">User Name</th>
+            <th style="padding: 0.85rem 1rem; font-size: 0.8125rem; font-weight: 700; color: var(--primary-800);">Email & ID</th>
+            <th style="padding: 0.85rem 1rem; font-size: 0.8125rem; font-weight: 700; color: var(--primary-800);">Role</th>
+            <th style="padding: 0.85rem 1rem; font-size: 0.8125rem; font-weight: 700; color: var(--primary-800);">Department</th>
+            <th style="padding: 0.85rem 1rem; font-size: 0.8125rem; font-weight: 700; color: var(--primary-800);">Approval Status</th>
+            <th style="padding: 0.85rem 1rem; font-size: 0.8125rem; font-weight: 700; color: var(--primary-800);">Account State</th>
+            <th style="padding: 0.85rem 1rem; font-size: 0.8125rem; font-weight: 700; color: var(--primary-800); text-align: right;">Admin Actions</th>
+          </tr>
+        </thead>
+        <tbody id="userTableBody">
+          <tr>
+            <td colspan="7" style="text-align: center; padding: 2rem; color: var(--text-muted);">
+              Loading institutional accounts...
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let allUsers = [];
+let currentFilter = "all";
+
+async function loadUsers() {
+  try {
+    const res = await fetch("/api/faculty/admin/users");
+    const data = await res.json();
+    if (data.success) {
+      allUsers = data.users;
+      renderTable();
+    }
+  } catch (err) {
+    document.getElementById("userTableBody").innerHTML = `
+      <tr><td colspan="7" style="text-align:center; padding:2rem; color:var(--urgent-red);">
+        Failed to load users. Please ensure you have administrator privileges.
+      </td></tr>
+    `;
+  }
+}
+
+function setFilter(filter) {
+  currentFilter = filter;
+  ["filterAll", "filterFaculty", "filterStudent", "filterPending"].forEach(id => {
+    const btn = document.getElementById(id);
+    if (btn) {
+      btn.className = "btn btn-sm btn-secondary";
+    }
+  });
+
+  if (filter === "all") document.getElementById("filterAll").className = "btn btn-sm btn-primary";
+  if (filter === "faculty") document.getElementById("filterFaculty").className = "btn btn-sm btn-primary";
+  if (filter === "student") document.getElementById("filterStudent").className = "btn btn-sm btn-primary";
+  if (filter === "pending") document.getElementById("filterPending").className = "btn btn-sm btn-primary";
+
+  renderTable();
+}
+
+function renderTable() {
+  const tbody = document.getElementById("userTableBody");
+  let filtered = allUsers;
+
+  if (currentFilter === "faculty") {
+    filtered = allUsers.filter(u => u.role === "faculty");
+  } else if (currentFilter === "student") {
+    filtered = allUsers.filter(u => u.role === "student");
+  } else if (currentFilter === "pending") {
+    filtered = allUsers.filter(u => u.role === "faculty" && u.is_approved !== 1);
+  }
+
+  document.getElementById("userCountBadge").textContent = `Showing ${filtered.length} of ${allUsers.length} accounts`;
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `
+      <tr><td colspan="7" style="text-align:center; padding:2rem; color:var(--text-muted);">
+        No accounts match the selected filter.
+      </td></tr>
+    `;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(u => {
+    const isAppr = u.is_approved === 1;
+    const isActive = u.is_active === 1;
+    const isAdmin = u.is_admin === 1;
+
+    let apprBadge = isAppr 
+      ? `<span class="badge badge-normal" style="background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0;">✓ Approved</span>`
+      : `<span class="badge badge-urgent" style="background:#fffbeb; color:#b45309; border:1px solid #fde68a;">⏳ Pending Approval</span>`;
+
+    let activeBadge = isActive
+      ? `<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#10b981; margin-right:6px;"></span>Active`
+      : `<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#ef4444; margin-right:6px;"></span>Deactivated`;
+
+    let actions = [];
+    if (u.role === "faculty") {
+      if (!isAppr) {
+        actions.push(`<button class="btn btn-sm btn-primary" onclick="updateStatus(${u.id}, 'approve')">Approve</button>`);
+      } else {
+        actions.push(`<button class="btn btn-sm btn-secondary" onclick="updateStatus(${u.id}, 'reject')">Revoke Approval</button>`);
+      }
+    }
+
+    if (isActive) {
+      actions.push(`<button class="btn btn-sm btn-secondary" style="color:var(--urgent-red);" onclick="updateStatus(${u.id}, 'deactivate')">Deactivate</button>`);
+    } else {
+      actions.push(`<button class="btn btn-sm btn-secondary" style="color:var(--success-green);" onclick="updateStatus(${u.id}, 'activate')">Activate</button>`);
+    }
+
+    return `
+      <tr style="border-bottom: 1px solid var(--surface-border);">
+        <td style="padding: 0.85rem 1rem; font-weight: 600; color: var(--primary-900);">
+          ${escapeHtml(u.name)}
+          ${isAdmin ? '<span class="badge" style="background:#ede9fe; color:#6d28d9; margin-left:6px; font-size:0.7rem;">Admin</span>' : ''}
+        </td>
+        <td style="padding: 0.85rem 1rem; font-size: 0.8125rem;">
+          <div>${escapeHtml(u.email)}</div>
+          ${u.student_id ? `<div style="color:var(--text-muted); font-size:0.75rem;">ID: ${escapeHtml(u.student_id)}</div>` : ''}
+        </td>
+        <td style="padding: 0.85rem 1rem;">
+          <span class="user-role-badge role-${u.role}">${u.role}</span>
+        </td>
+        <td style="padding: 0.85rem 1rem; font-size: 0.8125rem; color: var(--text-secondary);">
+          ${escapeHtml(u.department || 'N/A')}
+        </td>
+        <td style="padding: 0.85rem 1rem;">
+          ${apprBadge}
+        </td>
+        <td style="padding: 0.85rem 1rem; font-size: 0.8125rem;">
+          ${activeBadge}
+        </td>
+        <td style="padding: 0.85rem 1rem; text-align: right;">
+          <div style="display: inline-flex; gap: 0.4rem; justify-content: flex-end;">
+            ${actions.join('')}
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+async function updateStatus(userId, action) {
+  const alertBox = document.getElementById("statusAlert");
+  try {
+    const res = await fetch(`/api/faculty/admin/users/${userId}/status`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.detail || "Action failed.");
+    }
+
+    alertBox.style.display = "block";
+    alertBox.style.background = "var(--success-bg)";
+    alertBox.style.borderColor = "var(--success-border)";
+    alertBox.style.color = "var(--success-green)";
+    alertBox.textContent = data.message;
+    await loadUsers();
+  } catch (err) {
+    alertBox.style.display = "block";
+    alertBox.style.background = "var(--urgent-bg)";
+    alertBox.style.borderColor = "var(--urgent-border)";
+    alertBox.style.color = "var(--urgent-red)";
+    alertBox.textContent = err.message;
+  }
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+document.addEventListener("DOMContentLoaded", loadUsers);
+</script>
+{% endblock %}

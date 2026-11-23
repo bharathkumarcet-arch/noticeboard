@@ -7,7 +7,7 @@ import sqlite3
 
 from app.config import settings
 from app.database import get_db
-from app.security import get_current_user_optional, require_faculty, require_student
+from app.security import get_current_user_optional, require_faculty, require_student, require_admin
 
 templates_dir = settings.BASE_DIR / "app" / "templates"
 templates = Jinja2Templates(directory=str(templates_dir))
@@ -118,7 +118,7 @@ def notice_detail_page(
     cursor = conn.cursor()
     cursor.execute("""
         SELECT 
-            n.id, n.title, n.body, n.category, n.priority, n.status,
+            n.id, n.title, n.body, n.category, n.priority, n.status, n.is_pinned,
             n.author_id, n.attachment_url, n.attachment_name, n.attachment_size,
             n.publish_at, n.expires_at, n.created_at, n.updated_at,
             u.name as author_name, u.department as author_department
@@ -160,9 +160,18 @@ def notice_detail_page(
         v = cursor.fetchone()
         notice["my_first_viewed_at"] = v["first_viewed_at"] if v else None
     else:
-        # Faculty sees readership count
+        # Faculty sees readership count and audit history
         cursor.execute("SELECT COUNT(*) FROM notice_views WHERE notice_id = ?", (notice_id,))
         notice["readership_count"] = cursor.fetchone()[0]
+
+        cursor.execute("""
+            SELECT a.*, u.name as user_name
+            FROM notice_audit_logs a
+            JOIN users u ON a.user_id = u.id
+            WHERE a.notice_id = ?
+            ORDER BY a.created_at DESC
+        """, (notice_id,))
+        notice["audit_logs"] = [dict(r) for r in cursor.fetchall()]
         
     ctx = common_context(request, user)
     ctx["notice"] = notice
@@ -273,6 +282,47 @@ def profile_page(
         return RedirectResponse(url="/login")
     ctx = common_context(request, user)
     return render_template(request, "profile.html", ctx)
+
+@router.get("/forgot-password", response_class=HTMLResponse)
+def forgot_password_page(
+    request: Request,
+    user: Optional[dict] = Depends(get_current_user_optional)
+):
+    if user:
+        dest = "/faculty" if user["role"] == "faculty" else "/student"
+        return RedirectResponse(url=dest)
+    ctx = common_context(request, user)
+    return render_template(request, "forgot_password.html", ctx)
+
+@router.get("/reset-password", response_class=HTMLResponse)
+def reset_password_page(
+    request: Request,
+    token: Optional[str] = None,
+    user: Optional[dict] = Depends(get_current_user_optional)
+):
+    if user:
+        dest = "/faculty" if user["role"] == "faculty" else "/student"
+        return RedirectResponse(url=dest)
+    ctx = common_context(request, user)
+    ctx["token"] = token or ""
+    return render_template(request, "reset_password.html", ctx)
+
+@router.get("/faculty/admin/users", response_class=HTMLResponse)
+def admin_users_page(
+    request: Request,
+    user: dict = Depends(require_admin)
+):
+    ctx = common_context(request, user)
+    return render_template(request, "admin_users.html", ctx)
+
+@router.get("/faculty/notices/{notice_id}/readership/csv")
+def download_notice_readership_csv_page(
+    notice_id: int,
+    user: dict = Depends(require_faculty),
+    conn: sqlite3.Connection = Depends(get_db)
+):
+    from app.routes.faculty import export_notice_readership_csv
+    return export_notice_readership_csv(notice_id=notice_id, user=user, conn=conn)
 
 @router.get("/privacy", response_class=HTMLResponse)
 def privacy_page(

@@ -91,12 +91,16 @@ def get_current_user_optional(request: Request, conn: sqlite3.Connection = Depen
         
     user_id = payload.get("uid")
     cursor = conn.cursor()
-    cursor.execute("SELECT id, name, email, role, department, course, student_id, is_approved, created_at FROM users WHERE id = ?", (user_id,))
+    cursor.execute("SELECT id, name, email, role, department, course, student_id, is_approved, is_active, is_admin, created_at FROM users WHERE id = ?", (user_id,))
     row = cursor.fetchone()
     if not row:
         return None
         
     user = dict(row)
+    # Check if account has been deactivated by administrator
+    if user.get("is_active", 1) != 1:
+        return None
+
     # Ensure role from DB matches token
     if user["role"] != payload.get("role"):
         return None
@@ -108,9 +112,9 @@ def get_current_user(request: Request, user: Optional[Dict[str, Any]] = Depends(
         if "text/html" in request.headers.get("accept", ""):
             raise HTTPException(
                 status_code=status.HTTP_307_TEMPORARY_REDIRECT,
-                headers={"Location": "/login?error=Session+expired.+Please+log+in+again."}
+                headers={"Location": "/login?error=Session+expired+or+account+inactive.+Please+log+in+again."}
             )
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required or account inactive")
     return user
 
 def require_role(allowed_roles: List[str]):
@@ -139,7 +143,20 @@ def require_approved_faculty(request: Request, user: Dict[str, Any] = Depends(re
             )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Your faculty account is pending administrative approval. You cannot publish, edit, or delete notices or view readership analytics until approved."
+            detail="Your faculty account is pending administrative approval. You cannot publish, edit, pin, or delete notices or view readership analytics until approved."
+        )
+    return user
+
+def require_admin(request: Request, user: Dict[str, Any] = Depends(require_approved_faculty)) -> Dict[str, Any]:
+    if user.get("is_admin", 0) != 1:
+        if "text/html" in request.headers.get("accept", ""):
+            raise HTTPException(
+                status_code=status.HTTP_307_TEMPORARY_REDIRECT,
+                headers={"Location": "/faculty?error=Administrator+privileges+required."}
+            )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Administrator privileges required for this action."
         )
     return user
 

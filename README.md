@@ -1,231 +1,167 @@
 # College Notice Board Management System
 ### Shree Devi Institute of Technology
 
-A full-stack, responsive, and secure institutional web application designed for **Shree Devi Institute of Technology** to publish, manage, and verify circulars and announcements with guaranteed unique student readership tracking.
+A full-stack, responsive, and secure institutional web application designed for **Shree Devi Institute of Technology** to publish, manage, and verify circulars and announcements with guaranteed unique student readership tracking, notice pinning, automated scheduling and expiration, audit trails, and role-based administrative controls.
 
 ---
 
 ## 🏛 Features Overview
 
-### 1. Two-Tier Role-Based Access Control (RBAC)
-- **Faculty / Administration Portal:**
-  - Create, edit, draft, publish, schedule, unpublish, archive, and delete official notices.
-  - Upload verified PDF or image attachments (up to 5 MB).
-  - Dashboard analytics displaying published, draft, archived circulars, and campus-wide reach.
-  - **Unique Readership Tracking:** Monitor the exact unique count and list of enrolled students who opened each notice, complete with their first-view timestamps.
-  - Student and classmate visibility lists are strictly hidden from students.
-  - Profile management and secure credential changes.
-  - **Controlled Faculty Approval Flow:** Newly registered faculty must provide an active Institute Invitation Code or obtain administrative approval before publishing and analytics permissions are unlocked.
+### 1. Categories, Search & Filters
+- **Standardized Categories:** `Academics`, `Exams`, `Events`, `Placements`, and `General`.
+- **Search Capabilities:** Search circulars by title, full content, or issuing author in real-time.
+- **Multi-Parameter Filtering:** Filter by Category, Priority (`Urgent`, `Important`, `Regular`), and Date.
+- **Mobile Responsive:** Adaptive touch-friendly filter bars with instant reset buttons.
+- **Accessible Status Indicators:** Distinct badges and visual icons (e.g., 🚨 Urgent, ⚠️ Important, ℹ️ Regular) ensuring clarity without relying on color alone.
 
-- **Student Portal:**
-  - View published, currently active circulars in real-time.
-  - Live full-text search across titles and descriptions.
-  - Category filtering (`Academic`, `Examination`, `Placement`, `Cultural`, `Sports`, `Administrative`, `General`).
-  - Priority filtering (`Urgent`, `Important`, `Normal`) with visual urgency badges.
-  - "New" indicators for circulars issued in the last 48 hours and "Read" vs "Unread" badges.
-  - Secure attachment preview and download.
-  - Automatic, idempotent first-read recording upon opening a notice.
-  - Profile settings and self-service registration.
+### 2. Notice Pinning
+- **Faculty / Admin Pin Controls:** Faculty can pin or unpin notices with a single click or during notice creation/editing.
+- **Student Board Prominence:** Pinned notices are pinned prominently to the top of the student board, highlighted with a distinct pin indicator.
+- **Strict Authorization:** Only approved faculty and administrators can change pin status; student pin modification is blocked on the backend.
 
-### 2. Complete Signup & Registration Flows
-- **Sign-in Screen Entry Points (`/login`):**
-  - Direct link to “Create a student account” (`/register/student`)
-  - Direct link to “Create a faculty account” (`/register/faculty`)
-  - Role selection hub (`/register` / `/signup`)
-  - Links back to sign-in from every signup page.
+### 3. Scheduling and Expiry
+- **Lifecycle Management:** Save notices as drafts, publish immediately, or schedule for future release dates.
+- **Automatic Expiration:** Set an optional expiry date and time. After expiration, notices automatically disappear from student feeds while remaining archived in faculty records.
+- **Date Validation:** Server validates that expiration dates must follow publication dates.
+- **Clear Statuses:** Distinguishes between `Active`, `Scheduled`, `Expired`, `Draft`, and `Archived`.
 
-- **Student Registration (`/register/student`):**
-  - Collects Full Name, Student ID / Registration No. / USN (e.g. `4SD23CS045`), College Email Address, Department, Course & Year, Password & Confirm Password.
-  - Server-enforced `student` role.
-  - Automatic sign-in and redirect to the Student Notice Board dashboard.
-
-- **Faculty Registration (`/register/faculty`):**
-  - Collects Full Name, Official Institute Email (`@sdit.ac.in`), Department, Password & Confirm Password (min 8 chars), and an optional/required Institute Faculty Invitation Code.
-  - Server-enforced `faculty` role (users cannot assign their own permissions).
-  - **Instant Verification:** If the valid `FACULTY_INVITE_CODE` is provided, the account is verified immediately (`is_approved = 1`).
-  - **Administrative Review:** If submitted without the code, the account is saved in pending state (`is_approved = 0`). Until approved, the faculty member cannot publish, edit, or delete notices or access readership analytics.
-
-### 3. High-Assurance Readership Tracking
-- **Idempotency Guarantee:** When a student opens a notice, their first view is recorded in `notice_views`. Subsequent refreshes or visits maintain the original timestamp and do not inflate the tally.
+### 4. Unique Readership Reports & CSV Export
+- **Idempotency Guarantee:** When an authenticated student opens a notice, their first view is recorded in `notice_views`. Subsequent refreshes or repeat visits maintain the original timestamp and do not inflate the count.
 - **Database-Level Constraint:** Enforced with `UNIQUE(notice_id, student_id)` and transaction-safe parameterization.
-- **Faculty Exclusion:** Views by authors and administrators do not count toward student readership statistics.
-- **Privacy Policy Transparency:** Dedicated privacy statement explains data collection, audit rationale, and role restrictions.
+- **Faculty Exclusion:** Views by faculty members or administrators are never counted toward student readership.
+- **Readership Dashboard:** Per-notice analytics showing reader count, first-view timestamps, student IDs, departments, and course/year.
+- **CSV Export:** Authorized faculty/administrators can export notice readership reports as CSV files (`/faculty/notices/{id}/readership/csv`).
+
+### 5. Attachments
+- **Allowed Formats:** Official PDFs and images (PNG, JPG, JPEG, WEBP).
+- **Server-Side Validation:** Enforces 5 MB file size limit and verifies file extension and MIME type.
+- **Limits Shown Upfront:** Allowed formats and 5 MB limit are clearly displayed on the upload form before submission.
+- **Secure File Access:** Secure endpoints verify user session before serving downloads.
+
+### 6. Faculty Approval & Account Management
+- **Student Signup:** Open registration with name, student ID / USN, department, course, and institutional email.
+- **Controlled Faculty Onboarding:**
+  - Faculty register with their institutional email and academic department.
+  - Option 1: Fast-track instant approval with the institute secret joining code (`SDIT-FACULTY-2026`).
+  - Option 2: Pending registration (`is_approved = 0`) awaiting administrative approval.
+  - Pending faculty cannot publish, edit, pin, or delete notices or view analytics.
+- **Admin Account Management Screen (`/faculty/admin/users`):**
+  - Administrators can review all institutional accounts.
+  - One-click actions to Approve, Revoke Approval, Activate, or Deactivate accounts.
+  - Deactivated accounts cannot sign in.
+
+### 7. Password Recovery ("Forgot Password?")
+- **Recovery Hub (`/forgot-password`):** Secure self-service password reset request.
+- **Anti-Enumeration:** The system returns a generic confirmation message regardless of whether an email exists, preventing account enumeration attacks.
+- **Secure Time-Limited Tokens:** Generates 32-byte cryptographic reset tokens valid for 1 hour.
+- **Reset Page (`/reset-password?token=...`):** Validates the token and updates the user's password securely with bcrypt hashing.
+
+### 8. Immutable Audit History
+- **Action Tracking:** Automatically logs critical notice events: `created`, `edited`, `published`, `scheduled`, `pinned`, `unpinned`, `archived`, and `deleted`.
+- **Audit Details:** Records the actor name, user ID, notice title, action taken, and timestamp.
+- **Audit Screen:** Faculty and administrators can view the complete audit log directly on the notice detail page.
+- **Immutable Log:** Audit entries cannot be modified or deleted through ordinary application routes.
+
+### 9. Student Experience & Accessibility
+- **"Unread" Indicators:** Clearly identifies unread circulars with a blue `● UNREAD` badge based on recorded views.
+- **Keyboard Navigation & Visible Focus:** Full focus rings (`:focus-visible`), skip-to-content links, and semantic HTML throughout.
+- **Responsive Design:** Designed and tested across mobile, tablet, and desktop screens.
+- **Confirmation Modals:** Accessible dialogs for destructive actions (e.g. notice deletion).
+
+### 10. Institution Branding
+- Explicitly branded for **Shree Devi Institute of Technology** across headers, navigation, footers, page titles, empty states, and exports.
+- Product title **"College Notice Board Management System"** appears consistently as supporting text.
 
 ---
 
 ## 🛠 Technology Stack
 
 - **Institution:** Shree Devi Institute of Technology
-- **Backend:** Python 3.12, FastAPI (high-performance asynchronous ASGI framework), Starlette.
-- **Database:** SQLite with foreign key enforcement (`PRAGMA foreign_keys = ON`), parameterized queries, and composite indexes.
-- **Security & Cryptography:** `bcrypt` for one-way salted password hashing, HMAC-SHA256 signed session tokens stored in HTTP-only cookies (`SameSite=Lax`).
-- **Frontend:** Jinja2 SSR combined with responsive, component-driven modern CSS design system, responsive mobile layout, accessible modal dialogs, and toast notifications.
-- **Testing:** `pytest` test suite verifying authorization, RBAC boundaries, file safety, and readership idempotency.
+- **Backend:** Python 3.12, FastAPI, Starlette.
+- **Database:** SQLite with foreign keys (`PRAGMA foreign_keys = ON`), transactions, and indexes.
+- **Security:** `bcrypt` salted password hashing, HMAC-SHA256 session tokens in HTTP-only cookies (`SameSite=Lax`).
+- **Frontend:** Jinja2 SSR, component-driven CSS design system with mobile responsiveness.
+- **Testing:** `pytest` test suite with 16 automated tests covering all RBAC boundaries, pinning, CSV exports, audit trails, and recovery flows.
 
 ---
 
-## 📁 Project Structure
+## 🚀 Quick Start Guide
 
-```text
-├── app/
-│   ├── config.py             # Configuration & environment variables
-│   ├── database.py           # SQLite connection pool, schema initialization, and indices
-│   ├── security.py           # Bcrypt hashing, HMAC session tokens, and RBAC dependencies
-│   ├── models.py             # Pydantic schemas and input validation
-│   ├── cli.py                # Administrative CLI commands (init-db, seed, create-faculty, approve-faculty)
-│   ├── routes/
-│   │   ├── auth.py           # Login, student/faculty signup, password change, logout
-│   │   ├── notices.py        # Active notices listing & student detail (with view recording)
-│   │   ├── faculty.py        # Faculty metrics, CRUD operations, and readership analytics
-│   │   ├── uploads.py        # Safe attachment uploads and authorized downloads
-│   │   └── pages.py          # HTML page routers
-│   ├── static/
-│   │   ├── css/app.css       # Polished institutional design system & responsive styling
-│   │   └── js/app.js         # Interactive modals, toasts, debounced search, status toggles
-│   └── templates/
-│       ├── base.html         # Base template with responsive navigation & footer
-│       ├── login.html        # Dual-tab Faculty & Student sign-in with signup links
-│       ├── register_choice.html # Role selection hub (Student vs Faculty signup)
-│       ├── register_student.html# Approved student registration flow
-│       ├── register_faculty.html# Secure faculty registration flow with invite code
-│       ├── student_dashboard.html # Active notice board with live search & filters
-│       ├── notice_detail.html     # Notice content & attachment download
-│       ├── faculty_dashboard.html # Metrics cards & recent engagement table
-│       ├── faculty_notices.html   # Full management table with action buttons
-│       ├── notice_form.html       # Create/edit notice with live preview
-│       ├── readership.html        # Detailed audit table of unique student readers
-│       ├── profile.html           # Account info & password change form
-│       ├── privacy.html           # Readership tracking disclosure & compliance policy
-│       ├── 403.html               # Access forbidden page
-│       └── 404.html               # Page not found error view
-├── tests/
-│   └── test_notice_board.py  # Automated end-to-end test suite (11 tests)
-├── uploads/                  # Secure attachment storage directory
-├── main.py                   # FastAPI server entry point
-├── manage.py                 # Management CLI runner
-├── requirements.txt          # Production dependencies
-├── .env.example              # Template environment configuration
-└── README.md                 # Project documentation
+### 1. Installation
+
+```powershell
+# 1. Clone repository
+git clone https://github.com/bharathkumarcet-arch/noticeboard.git
+cd noticeboard
+
+# 2. Install Python dependencies
+pip install -r requirements.txt
 ```
 
----
+### 2. Environment Configuration
 
-## 🚀 Installation and Quickstart
-
-### 1. Prerequisites
-- Python 3.10+ (tested on Python 3.12)
-- pip
-
-### 2. Install Dependencies
-```bash
-python -m pip install -r requirements.txt
-```
-
-### 3. Environment Configuration
 Copy `.env.example` to `.env`:
-```bash
+```powershell
 cp .env.example .env
 ```
-Key configuration parameters:
-- `COLLEGE_NAME`: Set to `Shree Devi Institute of Technology`.
-- `SECRET_KEY`: Cryptographic key for HMAC session signatures.
-- `FACULTY_INVITE_CODE`: Institutional joining code for verified faculty signups (defaults to `SDIT-FACULTY-2026`).
-- `DATABASE_FILE`: SQLite database path (defaults to `notice_board.db`).
-- `MAX_UPLOAD_SIZE_BYTES`: Maximum attachment size (defaults to `5242880` bytes / 5 MB).
 
----
+Key environment variables:
+- `COLLEGE_NAME`: "Shree Devi Institute of Technology"
+- `SECRET_KEY`: Long secret key for signing session tokens
+- `FACULTY_INVITE_CODE`: Institute code for faculty onboarding (default: `SDIT-FACULTY-2026`)
+- `DATABASE_FILE`: SQLite database file path (default: `notice_board.db`)
+- `MAX_UPLOAD_SIZE_BYTES`: Max upload size in bytes (default: `5242880` = 5 MB)
 
-## 👥 Setup & Initial Accounts
+### 3. Database Initialization & Seeding
 
-### Option A: Quick Demo Seeding (Recommended)
-Populate the database with sample Shree Devi Institute of Technology faculty members, enrolled students, realistic circulars (urgent, important, normal, draft, and archived), and verified student readership records:
-```bash
+```powershell
+# Initialize tables and apply automatic migrations
+python manage.py init-db
+
+# Seed with sample SDIT faculty, students, and circulars
 python manage.py seed
 ```
 
-**Pre-seeded Demo Accounts:**
-| Role | Email | Password | Department / Notes |
+### 4. Run the Server
+
+```powershell
+python -m uvicorn main:app --host 127.0.0.1 --port 8000
+```
+
+Open your browser at: **[http://127.0.0.1:8000](http://127.0.0.1:8000)**
+
+---
+
+## 🔑 Pre-Configured Test Credentials
+
+| Role | Email Address | Password | Permissions |
 | :--- | :--- | :--- | :--- |
-| **Faculty** | `faculty.wright@sdit.ac.in` | `FacultyPass123!` | Academic Affairs (Approved) |
-| **Faculty** | `faculty.vance@sdit.ac.in` | `FacultyPass123!` | Computer Science & Eng. (Approved) |
-| **Faculty** | `faculty.chen@sdit.ac.in` | `FacultyPass123!` | Training & Placement (Approved) |
-| **Student** | `alice.cooper@student.sdit.ac.in` | `StudentPass123!` | B.E. CSE (`4SD23CS014`) |
-| **Student** | `bob.martinez@student.sdit.ac.in` | `StudentPass123!` | B.E. CSE (`4SD23CS029`) |
-| **Student** | `carol.smith@student.sdit.ac.in` | `StudentPass123!` | B.E. ECE (`4SD23EC008`) |
+| **Faculty (Admin)** | `faculty.vance@sdit.ac.in` | `FacultyPass123!` | Notices CRUD, Pinning, Readership, Account Approvals |
+| **Faculty (Admin)** | `admin.faculty@sdit.edu` | `FacultyPass@2026` | Notices CRUD, Pinning, Readership, Account Approvals |
+| **Faculty (Approved)** | `faculty.wright@sdit.ac.in` | `FacultyPass123!` | Notices CRUD, Pinning, Readership Reports |
+| **Student** | `alice.cooper@student.sdit.ac.in` | `StudentPass123!` | Read active notices, Download attachments, Track views |
+| **Student** | `bob.martinez@student.sdit.ac.in` | `StudentPass123!` | Read active notices, Download attachments, Track views |
 
 ---
 
-### Option B: Approving a Pending Faculty Account via CLI
-If a faculty member signs up without the invitation code, an administrator can approve and activate their account using:
-```bash
-python manage.py approve-faculty --email "faculty.member@sdit.ac.in"
+## 🧪 Automated Verification Suite
+
+Run all 16 automated integration and security tests:
+```powershell
+python -m pytest tests/test_notice_board.py -v
 ```
 
----
-
-### Option C: Direct Faculty Administrator Provisioning
-To create a verified faculty administrator directly via CLI:
-```bash
-python manage.py create-faculty \
-  --name "Dr. Rajesh Bhat" \
-  --email "rajesh.bhat@sdit.ac.in" \
-  --password "SecureFacultyPass999!" \
-  --department "Computer Science & Engineering"
-```
-
----
-
-## 💻 Running the Web Application
-
-Start the local server with hot reload:
-```bash
-python -m uvicorn main:app --host 127.0.0.1 --port 8000 --reload
-```
-Once started, open your browser and navigate to:
-```text
-http://127.0.0.1:8000
-```
-- Click **"Sign In"** or go directly to `/login`.
-- Choose **"Create a student account"** (`/register/student`) or **"Create a faculty account"** (`/register/faculty`).
-
----
-
-## 🧪 Running the Automated Test Suite
-
-Run the full end-to-end test suite:
-```bash
-python -m pytest tests/ -v
-```
-
-The automated test suite verifies:
-1. Institution name rendering across login and signup pages.
-2. Faculty creation, password hashing, and authentication.
-3. Student registration, password match confirmation, duplicate email & student ID rejection.
-4. Faculty signup with invitation code, pending approval enforcement, and CLI approval workflow.
-5. Role-Based Access Control (RBAC): student denial on faculty creation, metrics, and analytics endpoints (403 Forbidden).
-6. Notice lifecycle: draft creation -> student cannot see draft -> publication -> student sees active notice.
-7. Unique readership tracking: recording first view timestamp on student access.
-8. Readership idempotency: refreshing notices does not increment unique count; faculty visits do not count as student views.
-9. Readership analytics: faculty access to student readership breakdown.
-10. Safe attachment handling: type verification, size verification, and safe downloads.
-11. Filtering by category, priority, keyword search, expired notice hiding, and password change workflow.
-
----
-
-## 🔒 Security & Privacy Implementation Notes
-
-1. **Password Security:** All passwords are salted and hashed using `bcrypt` (10 rounds). Plaintext passwords are never stored or logged.
-2. **Session Security:** Sessions use HMAC-SHA256 signed tokens stored in `HttpOnly`, `SameSite=Lax` cookies, preventing XSS-based session hijacking.
-3. **Faculty Approval Safeguard:** Role assignments are enforced on the backend. Unapproved faculty cannot publish, edit, or delete notices or access student readership data.
-4. **Parameterization:** All database operations use SQLite parameterized bindings (`?`) to prevent SQL injection.
-5. **Attachment Security:**
-   - Files are validated against allowed formats (`.pdf`, `.png`, `.jpg`, `.jpeg`, `.webp`).
-   - File sizes are checked before storage (5 MB ceiling).
-   - Filenames are sanitized and prepended with a random UUID to prevent path traversal (`../`) attacks.
-   - Downloads check user authentication and verify that students can only download attachments from published, active notices.
-6. **Readership Privacy Compliance:** Notice readership logs are strictly accessible to faculty and administration. Students only see their own first-view acknowledgment.
-
----
-
-## 📜 License
-Developed for **Shree Devi Institute of Technology**. All rights reserved &copy; 2026.
+All 16 test suites verify:
+1. Institution branding rendering across all pages.
+2. Initial faculty login and session cookie handling.
+3. Student registration, validations, and duplicate prevention.
+4. Faculty registration and pending approval workflows.
+5. Strict RBAC blocking students from administrative endpoints.
+6. Notice lifecycle, expiration hiding, and unique student readership idempotency.
+7. Safe file uploads and authorized downloads.
+8. Live search and multi-parameter filtering.
+9. Notice pinning and unpinning permissions.
+10. Readership report CSV export with header metadata.
+11. Secure time-limited password recovery tokens and reset flow.
+12. Immutable audit history logging for all notice actions.
+13. Administrator faculty approvals, rejections, and deactivations.

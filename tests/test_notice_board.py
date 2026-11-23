@@ -483,3 +483,218 @@ def test_password_change_flow(client):
         "role": "student"
     })
     assert new_login.status_code == 200
+
+def test_pin_notice_flow_and_permissions(client):
+    # Faculty logs in
+    client.post("/api/auth/login", json={
+        "email": "turing@sdit.ac.in",
+        "password": "SuperSecret123!",
+        "role": "faculty"
+    })
+
+    # Create notice
+    c_res = client.post("/api/faculty/notices", data={
+        "title": "Semester Registration Mandatory Guidelines",
+        "body": "All students must submit elective choices by Friday.",
+        "category": "Academics",
+        "priority": "important",
+        "status": "published"
+    })
+    assert c_res.status_code == 201
+    notice_id = c_res.json()["notice_id"]
+
+    # Pin the notice
+    pin_res = client.post(f"/api/faculty/notices/{notice_id}/pin")
+    assert pin_res.status_code == 200
+    assert pin_res.json()["is_pinned"] is True
+
+    # Student logs in
+    client.post("/api/auth/login", json={
+        "email": "jane@student.sdit.ac.in",
+        "password": "NewSecretPass456!",
+        "role": "student"
+    })
+
+    # Student sees pinned notice at the top
+    feed_res = client.get("/api/notices")
+    assert feed_res.status_code == 200
+    notices = feed_res.json()["notices"]
+    pinned_notice = next((n for n in notices if n["id"] == notice_id), None)
+    assert pinned_notice is not None
+    assert pinned_notice["is_pinned"] == 1
+
+    # Student cannot pin/unpin
+    student_pin_res = client.post(f"/api/faculty/notices/{notice_id}/pin")
+    assert student_pin_res.status_code == 403
+
+def test_readership_csv_export(client):
+    # Faculty logs in
+    client.post("/api/auth/login", json={
+        "email": "turing@sdit.ac.in",
+        "password": "SuperSecret123!",
+        "role": "faculty"
+    })
+
+    # Create published notice
+    create_res = client.post("/api/faculty/notices", data={
+        "title": "Placement Drive Orientation",
+        "body": "Campus placement orientation in Main Auditorium.",
+        "category": "Placements",
+        "priority": "important",
+        "status": "published"
+    })
+    notice_id = create_res.json()["notice_id"]
+
+    # Student views it
+    client.post("/api/auth/login", json={
+        "email": "jane@student.sdit.ac.in",
+        "password": "NewSecretPass456!",
+        "role": "student"
+    })
+    client.get(f"/api/notices/{notice_id}")
+
+    # Student cannot export CSV
+    student_csv = client.get(f"/api/faculty/notices/{notice_id}/readership/csv")
+    assert student_csv.status_code == 403
+
+    # Faculty exports CSV
+    client.post("/api/auth/login", json={
+        "email": "turing@sdit.ac.in",
+        "password": "SuperSecret123!",
+        "role": "faculty"
+    })
+    csv_res = client.get(f"/api/faculty/notices/{notice_id}/readership/csv")
+    assert csv_res.status_code == 200
+    assert "text/csv" in csv_res.headers["content-type"]
+    assert "Shree Devi Institute of Technology" in csv_res.text
+    assert "Jane Student" in csv_res.text
+    assert "jane@student.sdit.ac.in" in csv_res.text
+
+def test_forgot_and_reset_password_flow(client):
+    # 1. Request password reset
+    forgot_res = client.post("/api/auth/forgot-password", json={
+        "email": "jane@student.sdit.ac.in"
+    })
+    assert forgot_res.status_code == 200
+    data = forgot_res.json()
+    assert "password reset instructions" in data["message"]
+    token = data["reset_token"]
+    assert token is not None
+
+    # 2. Reset with wrong confirmation
+    bad_res = client.post("/api/auth/reset-password", json={
+        "token": token,
+        "new_password": "NewPass2026!Updated",
+        "confirm_password": "WrongMismatchPassword"
+    })
+    assert bad_res.status_code == 400
+
+    # 3. Successful reset
+    ok_res = client.post("/api/auth/reset-password", json={
+        "token": token,
+        "new_password": "NewPass2026!Updated",
+        "confirm_password": "NewPass2026!Updated"
+    })
+    assert ok_res.status_code == 200
+    assert "reset successfully" in ok_res.json()["message"]
+
+    # 4. Token cannot be reused
+    reuse_res = client.post("/api/auth/reset-password", json={
+        "token": token,
+        "new_password": "AnotherPassword123!",
+        "confirm_password": "AnotherPassword123!"
+    })
+    assert reuse_res.status_code == 400
+
+    # 5. Log in with reset password
+    login_res = client.post("/api/auth/login", json={
+        "email": "jane@student.sdit.ac.in",
+        "password": "NewPass2026!Updated",
+        "role": "student"
+    })
+    assert login_res.status_code == 200
+
+def test_notice_audit_logs(client):
+    # Faculty logs in
+    client.post("/api/auth/login", json={
+        "email": "turing@sdit.ac.in",
+        "password": "SuperSecret123!",
+        "role": "faculty"
+    })
+
+    # Create notice
+    c_res = client.post("/api/faculty/notices", data={
+        "title": "Sports Day Registration Open",
+        "body": "Annual track and field events registration.",
+        "category": "Events",
+        "priority": "normal",
+        "status": "published"
+    })
+    n_id = c_res.json()["notice_id"]
+
+    # Update notice
+    client.put(f"/api/faculty/notices/{n_id}", data={
+        "title": "Sports Day Registration Open (Extended)",
+        "body": "Annual track and field events registration extended deadline.",
+        "category": "Events",
+        "priority": "important",
+        "status": "published"
+    })
+
+    # Pin notice
+    client.post(f"/api/faculty/notices/{n_id}/pin")
+
+    # Fetch audit logs
+    audit_res = client.get(f"/api/faculty/notices/{n_id}/audit")
+    assert audit_res.status_code == 200
+    logs = audit_res.json()["audit_logs"]
+    assert len(logs) >= 3
+    actions = [l["action"] for l in logs]
+    assert any("created" in a for a in actions)
+    assert "edited" in actions
+    assert "pinned" in actions
+
+def test_admin_faculty_account_management(client):
+    from app.security import hash_password
+    # Grant turing admin status in DB
+    with get_db_ctx(TEST_DB_PATH) as conn:
+        conn.execute("UPDATE users SET is_admin = 1 WHERE email = 'turing@sdit.ac.in'")
+        # Insert a pending faculty
+        conn.execute("""
+            INSERT INTO users (name, email, password_hash, role, department, is_approved, is_active, is_admin)
+            VALUES ('Pending Prof', 'pending.prof@sdit.ac.in', ?, 'faculty', 'Physics', 0, 1, 0)
+        """, (hash_password("PendingPass123!"),))
+        conn.commit()
+
+    # Login as admin faculty
+    client.post("/api/auth/login", json={
+        "email": "turing@sdit.ac.in",
+        "password": "SuperSecret123!",
+        "role": "faculty"
+    })
+
+    # View accounts
+    admin_list = client.get("/api/faculty/admin/users")
+    assert admin_list.status_code == 200
+    users = admin_list.json()["users"]
+    pending = next((u for u in users if u["email"] == "pending.prof@sdit.ac.in"), None)
+    assert pending is not None
+    assert pending["is_approved"] == 0
+
+    # Approve pending faculty
+    appr_res = client.post(f"/api/faculty/admin/users/{pending['id']}/status", json={"action": "approve"})
+    assert appr_res.status_code == 200
+
+    # Deactivate account
+    deact_res = client.post(f"/api/faculty/admin/users/{pending['id']}/status", json={"action": "deactivate"})
+    assert deact_res.status_code == 200
+
+    # Deactivated account cannot login
+    client.post("/api/auth/logout")
+    fail_login = client.post("/api/auth/login", json={
+        "email": "pending.prof@sdit.ac.in",
+        "password": "PendingPass123!",
+        "role": "faculty"
+    })
+    assert fail_login.status_code == 403
+    assert "deactivated" in fail_login.json()["detail"].lower()

@@ -43,6 +43,19 @@ def run_approve_faculty(email: str):
         conn.commit()
         print(f"SUCCESS: Faculty account for '{user['name']}' <{email}> has been approved and activated.")
 
+def run_make_admin(email: str):
+    init_db()
+    with get_db_ctx() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, name, role FROM users WHERE email = ? COLLATE NOCASE", (email,))
+        user = cursor.fetchone()
+        if not user:
+            print(f"Error: User with email '{email}' not found.")
+            sys.exit(1)
+        cursor.execute("UPDATE users SET is_admin = 1, is_approved = 1, is_active = 1 WHERE id = ?", (user["id"],))
+        conn.commit()
+        print(f"SUCCESS: User '{user['name']}' <{email}> has been granted Administrator privileges.")
+
 def run_seed_data():
     init_db()
     with get_db_ctx() as conn:
@@ -53,26 +66,28 @@ def run_seed_data():
         if cursor.fetchone()[0] > 0:
             print("Database already contains data. Clearing existing sample records...")
             cursor.execute("DELETE FROM notice_views")
+            cursor.execute("DELETE FROM notice_audit_logs")
             cursor.execute("DELETE FROM notices")
             cursor.execute("DELETE FROM users")
             try:
-                cursor.execute("DELETE FROM sqlite_sequence WHERE name IN ('notices', 'users', 'notice_views')")
+                cursor.execute("DELETE FROM sqlite_sequence WHERE name IN ('notices', 'users', 'notice_views', 'notice_audit_logs')")
             except Exception:
                 pass
             
         # 1. Seed Faculty Accounts (Shree Devi Institute of Technology)
         faculty_users = [
-            ("Dr. Arthur Vance", "faculty.vance@sdit.ac.in", "FacultyPass123!", "Computer Science & Engineering"),
-            ("Prof. Eleanor Wright", "faculty.wright@sdit.ac.in", "FacultyPass123!", "Academic Affairs"),
-            ("Dr. Robert Chen", "faculty.chen@sdit.ac.in", "FacultyPass123!", "Training & Placement Cell"),
+            ("Dr. Arthur Vance", "faculty.vance@sdit.ac.in", "FacultyPass123!", "Computer Science & Engineering", 1),
+            ("Prof. Eleanor Wright", "faculty.wright@sdit.ac.in", "FacultyPass123!", "Academic Affairs", 0),
+            ("Dr. Robert Chen", "faculty.chen@sdit.ac.in", "FacultyPass123!", "Training & Placement Cell", 0),
+            ("Administrative Dean", "admin.faculty@sdit.edu", "FacultyPass@2026", "Administration & Governance", 1),
         ]
         
         faculty_ids = {}
-        for name, email, pwd, dept in faculty_users:
+        for name, email, pwd, dept, is_adm in faculty_users:
             cursor.execute("""
-                INSERT INTO users (name, email, password_hash, role, department, is_approved)
-                VALUES (?, ?, ?, 'faculty', ?, 1)
-            """, (name, email, hash_password(pwd), dept))
+                INSERT INTO users (name, email, password_hash, role, department, is_approved, is_active, is_admin)
+                VALUES (?, ?, ?, 'faculty', ?, 1, 1, ?)
+            """, (name, email, hash_password(pwd), dept, is_adm))
             faculty_ids[email] = cursor.lastrowid
             
         # 2. Seed Student Accounts (Shree Devi Institute of Technology)
@@ -246,14 +261,26 @@ def run_seed_data():
         
         notice_ids = []
         for n in notices_data:
+            cat = n["category"]
+            if cat in ("Examination", "Exam"):
+                cat = "Exams"
+            elif cat in ("Placement",):
+                cat = "Placements"
+            elif cat in ("Cultural", "Event"):
+                cat = "Events"
+            elif cat in ("Academic",):
+                cat = "Academics"
+            elif cat in ("Administrative",):
+                cat = "General"
+
             cursor.execute("""
                 INSERT INTO notices (
-                    title, body, category, priority, status, author_id,
+                    title, body, category, priority, status, is_pinned, author_id,
                     attachment_url, attachment_name, attachment_size,
                     publish_at, expires_at, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
-                n["title"], n["body"], n["category"], n["priority"], n["status"], n["author_id"],
+                n["title"], n["body"], cat, n["priority"], n["status"], n.get("is_pinned", 0), n["author_id"],
                 n["attachment_url"], n["attachment_name"], n["attachment_size"],
                 n["publish_at"], n["expires_at"], n["publish_at"], n["publish_at"]
             ))
@@ -317,6 +344,10 @@ def main():
     approve_fac = subparsers.add_parser("approve-faculty", help="Approve and activate a pending faculty account")
     approve_fac.add_argument("--email", required=True, help="Institutional email of pending faculty member")
     
+    # make-admin
+    make_admin_p = subparsers.add_parser("make-admin", help="Grant administrator privileges to an existing faculty member")
+    make_admin_p.add_argument("--email", required=True, help="Institutional email of faculty member")
+    
     args = parser.parse_args()
     
     if args.command == "init-db":
@@ -330,6 +361,8 @@ def main():
         run_create_faculty(args.name, args.email, args.password, args.department)
     elif args.command == "approve-faculty":
         run_approve_faculty(args.email)
+    elif args.command == "make-admin":
+        run_make_admin(args.email)
     else:
         parser.print_help()
 

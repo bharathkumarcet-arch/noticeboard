@@ -954,7 +954,39 @@ body {
   gap: 1rem;
 }
 
-/* Responsive queries */
+/* Accessibility & Keyboard Navigation Focus */
+:focus-visible {
+  outline: 2px solid var(--brand-blue);
+  outline-offset: 2px;
+}
+
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  background: var(--brand-blue);
+  color: #ffffff;
+  padding: 8px 16px;
+  z-index: 1000;
+  text-decoration: none;
+  font-weight: 600;
+  border-radius: 0 0 4px 0;
+  transition: top 0.2s;
+}
+
+.skip-link:focus {
+  top: 0;
+}
+
+.pinned-badge {
+  background: #fef2f2;
+  color: #b91c1c;
+  font-weight: 800;
+  border: 1px solid #fecaca;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
 @media (max-width: 768px) {
   .form-grid-2 {
     grid-template-columns: 1fr;

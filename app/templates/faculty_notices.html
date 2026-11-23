@@ -12,41 +12,50 @@
 </div>
 
 <!-- Filter Bar -->
-<div class="filter-bar">
-  <div class="filter-search-box">
+<div class="filter-bar" style="flex-wrap: wrap;">
+  <div class="filter-search-box" style="flex: 1 1 220px;">
     <input 
       type="text" 
       id="searchQuery" 
       class="filter-input" 
       placeholder="Search notices by title or content..."
       oninput="debounceSearch()"
+      aria-label="Search notices"
     >
   </div>
 
-  <select id="statusFilter" class="filter-select" onchange="fetchFacultyNotices(1)">
+  <select id="statusFilter" class="filter-select" onchange="fetchFacultyNotices(1)" aria-label="Filter by status">
     <option value="all">All Statuses</option>
     <option value="published">Published</option>
     <option value="draft">Drafts</option>
     <option value="archived">Archived</option>
   </select>
 
-  <select id="categoryFilter" class="filter-select" onchange="fetchFacultyNotices(1)">
+  <select id="categoryFilter" class="filter-select" onchange="fetchFacultyNotices(1)" aria-label="Filter by category">
     <option value="all">All Categories</option>
-    <option value="Academic">Academic</option>
-    <option value="Examination">Examination</option>
-    <option value="Placement">Placement</option>
-    <option value="Cultural">Cultural</option>
-    <option value="Sports">Sports</option>
-    <option value="Administrative">Administrative</option>
+    <option value="Academics">Academics</option>
+    <option value="Exams">Exams</option>
+    <option value="Events">Events</option>
+    <option value="Placements">Placements</option>
     <option value="General">General</option>
   </select>
 
-  <select id="priorityFilter" class="filter-select" onchange="fetchFacultyNotices(1)">
+  <select id="priorityFilter" class="filter-select" onchange="fetchFacultyNotices(1)" aria-label="Filter by priority">
     <option value="all">All Priorities</option>
     <option value="urgent">Urgent</option>
     <option value="important">Important</option>
     <option value="normal">Normal</option>
   </select>
+
+  <input 
+    type="date" 
+    id="dateFilter" 
+    class="filter-input" 
+    style="max-width: 160px;" 
+    title="Filter by publish date" 
+    onchange="fetchFacultyNotices(1)"
+    aria-label="Filter by date"
+  >
 
   <button class="btn btn-secondary btn-sm" onclick="resetFilters()">Reset</button>
 </div>
@@ -111,6 +120,7 @@ function resetFilters() {
   document.getElementById("statusFilter").value = "all";
   document.getElementById("categoryFilter").value = "all";
   document.getElementById("priorityFilter").value = "all";
+  document.getElementById("dateFilter").value = "";
   fetchFacultyNotices(1);
 }
 
@@ -127,6 +137,7 @@ async function fetchFacultyNotices(page = 1) {
   const status = document.getElementById("statusFilter").value;
   const category = document.getElementById("categoryFilter").value;
   const priority = document.getElementById("priorityFilter").value;
+  const dateVal = document.getElementById("dateFilter").value;
 
   const tbody = document.getElementById("facultyNoticesBody");
   const emptyState = document.getElementById("emptyState");
@@ -140,6 +151,7 @@ async function fetchFacultyNotices(page = 1) {
   if (status !== "all") params.set("status", status);
   if (category !== "all") params.set("category", category);
   if (priority !== "all") params.set("priority", priority);
+  if (dateVal) params.set("date", dateVal);
 
   try {
     const res = await fetch(`/api/faculty/notices?${params.toString()}`);
@@ -159,13 +171,21 @@ async function fetchFacultyNotices(page = 1) {
     }
 
     tbody.innerHTML = data.notices.map(n => {
+      const isPinned = Boolean(n.is_pinned);
       const priorityBadge = n.priority === 'urgent' 
-        ? `<span class="badge badge-urgent">Urgent</span>`
+        ? `<span class="badge badge-urgent">🚨 Urgent</span>`
         : n.priority === 'important'
-        ? `<span class="badge badge-important">Important</span>`
-        : `<span class="badge badge-normal">Normal</span>`;
+        ? `<span class="badge badge-important">⚠️ Important</span>`
+        : `<span class="badge badge-normal">ℹ️ Normal</span>`;
 
-      const statusBadge = `<span class="badge badge-status-${n.status}">${n.status}</span>`;
+      let statusBadge = `<span class="badge badge-status-${n.status}">${n.status}</span>`;
+      if (n.lifecycle_status === 'scheduled') {
+        statusBadge = `<span class="badge" style="background:#fef3c7; color:#92400e; border:1px solid #fde68a;">⏰ Scheduled</span>`;
+      } else if (n.lifecycle_status === 'expired') {
+        statusBadge = `<span class="badge" style="background:#f3f4f6; color:#4b5563; border:1px solid #e5e7eb;">⌛ Expired</span>`;
+      } else if (n.lifecycle_status === 'published') {
+        statusBadge = `<span class="badge badge-status-published">✓ Active</span>`;
+      }
 
       const statusActions = n.status === 'draft'
         ? `<button class="btn btn-secondary btn-sm" onclick="updateNoticeStatus(${n.id}, 'published')" title="Publish Now">Publish</button>`
@@ -174,13 +194,20 @@ async function fetchFacultyNotices(page = 1) {
            <button class="btn btn-secondary btn-sm" onclick="updateNoticeStatus(${n.id}, 'archived')" title="Archive">Archive</button>`
         : `<button class="btn btn-secondary btn-sm" onclick="updateNoticeStatus(${n.id}, 'published')" title="Restore to Published">Restore</button>`;
 
+      const pinButton = isPinned
+        ? `<button class="btn btn-sm" style="background:#fee2e2; color:#b91c1c; border:1px solid #fca5a5;" onclick="togglePin(${n.id})" title="Click to unpin">📌 Pinned</button>`
+        : `<button class="btn btn-secondary btn-sm" onclick="togglePin(${n.id})" title="Click to pin to top">📍 Pin</button>`;
+
       return `
         <tr>
           <td>
-            <a href="/notices/${n.id}" style="font-weight:600; color:var(--primary-900); text-decoration:none;">
-              ${escapeHtml(n.title)}
-            </a>
-            ${n.attachment_url ? '<span style="font-size:0.75rem; color:var(--brand-blue); margin-left:0.35rem;" title="Attachment Available">📎</span>' : ''}
+            <div style="display:flex; align-items:center; gap:0.4rem;">
+              ${isPinned ? '<span title="Pinned notice">📌</span>' : ''}
+              <a href="/notices/${n.id}" style="font-weight:600; color:var(--primary-900); text-decoration:none;">
+                ${escapeHtml(n.title)}
+              </a>
+              ${n.attachment_url ? '<span style="font-size:0.75rem; color:var(--brand-blue); margin-left:0.25rem;" title="Attachment Available">📎</span>' : ''}
+            </div>
           </td>
           <td><span class="badge badge-category">${n.category}</span></td>
           <td>${priorityBadge}</td>
@@ -192,10 +219,11 @@ async function fetchFacultyNotices(page = 1) {
             </a>
           </td>
           <td style="text-align: right;">
-            <div class="table-actions" style="justify-content: flex-end;">
+            <div class="table-actions" style="justify-content: flex-end; gap: 0.35rem;">
+              ${pinButton}
               ${statusActions}
               <a href="/faculty/notices/${n.id}/edit" class="btn btn-secondary btn-sm">Edit</a>
-              <a href="/faculty/notices/${n.id}/readership" class="btn btn-primary btn-sm">Readership</a>
+              <a href="/faculty/notices/${n.id}/readership" class="btn btn-primary btn-sm">Reports</a>
               <button class="btn btn-danger btn-sm" onclick="confirmDeleteNotice(${n.id}, '${escapeAttr(n.title)}')">Delete</button>
             </div>
           </td>
@@ -230,6 +258,21 @@ function escapeHtml(str) {
 function escapeAttr(str) {
   if (!str) return "";
   return str.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+}
+
+async function togglePin(noticeId) {
+  try {
+    const res = await fetch(`/api/faculty/notices/${noticeId}/pin`, { method: "POST" });
+    const data = await res.json();
+    if (res.ok) {
+      showToast(data.message, "success");
+      fetchFacultyNotices(currentPage);
+    } else {
+      showToast(data.detail || "Failed to update pin status.", "error");
+    }
+  } catch (err) {
+    showToast("Network error updating pin status.", "error");
+  }
 }
 
 document.addEventListener("DOMContentLoaded", () => {

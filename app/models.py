@@ -3,6 +3,7 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 EMAIL_PATTERN = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
+ALLOWED_CATEGORIES = ("Academics", "Exams", "Events", "Placements", "General")
 
 class UserCreateStudent(BaseModel):
     name: str = Field(..., min_length=2, max_length=100)
@@ -30,12 +31,27 @@ class PasswordChange(BaseModel):
     current_password: str
     new_password: str = Field(..., min_length=6, max_length=128)
 
+class ForgotPasswordRequest(BaseModel):
+    email: str = Field(..., pattern=EMAIL_PATTERN)
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(..., min_length=10)
+    new_password: str = Field(..., min_length=6, max_length=128)
+    confirm_password: Optional[str] = None
+
+class UserStatusUpdate(BaseModel):
+    action: str = Field(..., pattern="^(approve|reject|activate|deactivate)$")
+
+class NoticePinUpdate(BaseModel):
+    is_pinned: bool = Field(...)
+
 class NoticeCreate(BaseModel):
     title: str = Field(..., min_length=3, max_length=200)
     body: str = Field(..., min_length=5, max_length=20000)
     category: str = Field(..., min_length=2, max_length=50)
     priority: str = Field(default="normal", pattern="^(normal|important|urgent)$")
     status: str = Field(default="draft", pattern="^(draft|published|archived)$")
+    is_pinned: Optional[bool] = False
     publish_at: Optional[str] = None
     expires_at: Optional[str] = None
 
@@ -45,6 +61,7 @@ class NoticeUpdate(BaseModel):
     category: Optional[str] = Field(None, min_length=2, max_length=50)
     priority: Optional[str] = Field(None, pattern="^(normal|important|urgent)$")
     status: Optional[str] = Field(None, pattern="^(draft|published|archived)$")
+    is_pinned: Optional[bool] = None
     publish_at: Optional[str] = None
     expires_at: Optional[str] = None
     remove_attachment: Optional[bool] = False

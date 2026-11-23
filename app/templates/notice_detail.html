@@ -14,6 +14,10 @@
 <article class="detail-card">
   <div class="detail-header">
     <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.75rem;">
+      {% if notice.is_pinned %}
+        <span class="badge" style="background:#fee2e2; color:#b91c1c; font-weight:700; border:1px solid #fca5a5;">📌 Pinned</span>
+      {% endif %}
+
       {% if notice.priority == 'urgent' %}
         <span class="badge badge-urgent">🚨 Urgent Priority</span>
       {% elif notice.priority == 'important' %}
@@ -102,15 +106,48 @@
             Track which enrolled students have opened and acknowledged this official notice.
           </div>
         </div>
-        <div style="display: flex; gap: 0.5rem;">
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
           <a href="/faculty/notices/{{ notice.id }}/readership" class="btn btn-primary btn-sm">
             📊 View Readership Breakdown
+          </a>
+          <a href="/faculty/notices/{{ notice.id }}/readership/csv" class="btn btn-secondary btn-sm" title="Export Readership CSV">
+            📥 Export CSV
           </a>
           <a href="/faculty/notices/{{ notice.id }}/edit" class="btn btn-secondary btn-sm">
             ✏ Edit Notice
           </a>
         </div>
       </div>
+
+      {% if notice.audit_logs %}
+        <div style="margin-top: 1.75rem;">
+          <h3 style="font-size: 1rem; font-weight: 700; color: var(--primary-900); margin-bottom: 0.75rem;">
+            📜 Notice Audit History
+          </h3>
+          <div style="background: white; border: 1px solid var(--surface-border); border-radius: var(--radius-sm); overflow-x: auto;">
+            <table class="table" style="width: 100%; border-collapse: collapse; font-size: 0.8125rem;">
+              <thead>
+                <tr style="background: var(--surface-muted); text-align: left; border-bottom: 1px solid var(--surface-border);">
+                  <th style="padding: 0.5rem 0.75rem;">Action</th>
+                  <th style="padding: 0.5rem 0.75rem;">Actor</th>
+                  <th style="padding: 0.5rem 0.75rem;">Details</th>
+                  <th style="padding: 0.5rem 0.75rem; text-align: right;">Timestamp (UTC)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for log in notice.audit_logs %}
+                  <tr style="border-bottom: 1px solid var(--surface-border);">
+                    <td style="padding: 0.5rem 0.75rem;"><span class="badge badge-category" style="font-size:0.7rem;">{{ log.action }}</span></td>
+                    <td style="padding: 0.5rem 0.75rem; font-weight: 600;">{{ log.user_name }}</td>
+                    <td style="padding: 0.5rem 0.75rem; color: var(--text-secondary);">{{ log.details or '-' }}</td>
+                    <td style="padding: 0.5rem 0.75rem; color: var(--text-muted); text-align: right;">{{ log.created_at }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      {% endif %}
     {% endif %}
   </div>
 </article>

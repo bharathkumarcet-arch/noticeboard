@@ -40,13 +40,11 @@
         <div class="form-group">
           <label for="noticeCategory" class="form-label">Category *</label>
           <select id="noticeCategory" class="form-select" required>
-            {% set cat = notice.category if is_edit else 'Academic' %}
-            <option value="Academic" {% if cat == 'Academic' %}selected{% endif %}>Academic</option>
-            <option value="Examination" {% if cat == 'Examination' %}selected{% endif %}>Examination</option>
-            <option value="Placement" {% if cat == 'Placement' %}selected{% endif %}>Placement</option>
-            <option value="Cultural" {% if cat == 'Cultural' %}selected{% endif %}>Cultural</option>
-            <option value="Sports" {% if cat == 'Sports' %}selected{% endif %}>Sports</option>
-            <option value="Administrative" {% if cat == 'Administrative' %}selected{% endif %}>Administrative</option>
+            {% set cat = notice.category if is_edit else 'Academics' %}
+            <option value="Academics" {% if cat == 'Academics' %}selected{% endif %}>Academics</option>
+            <option value="Exams" {% if cat == 'Exams' %}selected{% endif %}>Exams</option>
+            <option value="Events" {% if cat == 'Events' %}selected{% endif %}>Events</option>
+            <option value="Placements" {% if cat == 'Placements' %}selected{% endif %}>Placements</option>
             <option value="General" {% if cat == 'General' %}selected{% endif %}>General</option>
           </select>
         </div>
@@ -83,6 +81,17 @@
             value="{{ notice.expires_at[:16] if is_edit and notice.expires_at else '' }}"
           >
           <div class="form-help">Notice will automatically hide from students after this date.</div>
+        </div>
+      </div>
+
+      <!-- Pin Notice Checkbox -->
+      <div class="form-group" style="background: #fff1f2; border: 1px solid #fecdd3; padding: 0.85rem 1rem; border-radius: var(--radius-sm); margin-bottom: 1.25rem;">
+        <label style="display: flex; align-items: center; gap: 0.6rem; cursor: pointer; margin: 0; font-weight: 700; color: #9f1239;">
+          <input type="checkbox" id="noticeIsPinned" {% if is_edit and notice.is_pinned %}checked{% endif %}>
+          <span>📌 Pin this notice to the top of the student board</span>
+        </label>
+        <div style="font-size: 0.75rem; color: #be123c; margin-top: 0.25rem; margin-left: 1.6rem;">
+          Pinned notices remain highlighted at the top of the feed regardless of publication date.
         </div>
       </div>
 
@@ -234,6 +243,9 @@ async function submitNoticeWithStatus(status) {
   formData.append("category", category);
   formData.append("priority", priority);
   formData.append("status", status);
+
+  const isPinned = document.getElementById("noticeIsPinned") ? document.getElementById("noticeIsPinned").checked : false;
+  formData.append("is_pinned", isPinned ? "true" : "false");
 
   if (publishAt) formData.append("publish_at", publishAt.replace("T", " ") + ":00");
   if (expiresAt) formData.append("expires_at", expiresAt.replace("T", " ") + ":00");

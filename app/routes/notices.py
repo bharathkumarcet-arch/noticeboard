@@ -13,6 +13,7 @@ def list_active_notices(
     q: Optional[str] = Query(None, description="Search term in title or body"),
     category: Optional[str] = Query(None, description="Filter by category"),
     priority: Optional[str] = Query(None, description="Filter by priority (normal, important, urgent)"),
+    date: Optional[str] = Query(None, description="Filter by publish date (YYYY-MM-DD)"),
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=50),
     user: dict = Depends(get_current_user),
@@ -22,6 +23,7 @@ def list_active_notices(
     List active, published notices for students.
     Only returns notices that are published and within valid publish_at/expires_at range.
     Includes indicator if notice is new (< 48 hrs) or if requesting student has viewed it.
+    Pinned notices appear at the top.
     """
     cursor = conn.cursor()
     
@@ -45,6 +47,10 @@ def list_active_notices(
     if priority and priority.strip() and priority != "all":
         where_clauses.append("n.priority = ?")
         params.append(priority.strip())
+
+    if date and date.strip():
+        where_clauses.append("date(n.publish_at) = date(?)")
+        params.append(date.strip())
         
     where_sql = " AND ".join(where_clauses)
     
@@ -57,7 +63,7 @@ def list_active_notices(
     offset = (page - 1) * page_size
     query_sql = f"""
         SELECT 
-            n.id, n.title, n.body, n.category, n.priority, n.status,
+            n.id, n.title, n.body, n.category, n.priority, n.status, n.is_pinned,
             n.attachment_url, n.attachment_name, n.attachment_size,
             n.publish_at, n.expires_at, n.created_at, n.updated_at,
             u.name as author_name, u.department as author_department,
@@ -73,6 +79,7 @@ def list_active_notices(
         JOIN users u ON n.author_id = u.id
         WHERE {where_sql}
         ORDER BY 
+            n.is_pinned DESC,
             CASE n.priority 
                 WHEN 'urgent' THEN 1 
                 WHEN 'important' THEN 2 
@@ -122,7 +129,7 @@ def get_notice_detail(
     cursor = conn.cursor()
     cursor.execute("""
         SELECT 
-            n.id, n.title, n.body, n.category, n.priority, n.status,
+            n.id, n.title, n.body, n.category, n.priority, n.status, n.is_pinned,
             n.author_id, n.attachment_url, n.attachment_name, n.attachment_size,
             n.publish_at, n.expires_at, n.created_at, n.updated_at,
             u.name as author_name, u.department as author_department

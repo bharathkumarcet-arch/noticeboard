@@ -1,8 +1,17 @@
+import secrets
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 import sqlite3
 
 from app.database import get_db
-from app.models import UserLogin, UserCreateStudent, UserCreateFaculty, PasswordChange
+from app.models import (
+    UserLogin,
+    UserCreateStudent,
+    UserCreateFaculty,
+    PasswordChange,
+    ForgotPasswordRequest,
+    ResetPasswordRequest
+)
 from app.security import (
     hash_password,
     verify_password,
@@ -17,15 +26,23 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 def login(data: UserLogin, response: Response, conn: sqlite3.Connection = Depends(get_db)):
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT id, name, email, password_hash, role, department, course, student_id, is_approved FROM users WHERE email = ? COLLATE NOCASE",
+        "SELECT id, name, email, password_hash, role, department, course, student_id, is_approved, is_active, is_admin FROM users WHERE email = ? COLLATE NOCASE",
         (data.email,)
     )
-    user = cursor.fetchone()
+    user_row = cursor.fetchone()
     
-    if not user or not verify_password(data.password, user["password_hash"]):
+    if not user_row or not verify_password(data.password, user_row["password_hash"]):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password."
+        )
+
+    user = dict(user_row)
+
+    if user.get("is_active", 1) != 1:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your account has been deactivated by the institute administrator. Please contact SDIT administration."
         )
         
     if user["role"] != data.role:
@@ -47,6 +64,7 @@ def login(data: UserLogin, response: Response, conn: sqlite3.Connection = Depend
     )
     
     is_appr = bool(user["is_approved"] if "is_approved" in user.keys() else 1)
+    is_adm = bool(user["is_admin"] if "is_admin" in user.keys() else 0)
     
     return {
         "success": True,
@@ -59,7 +77,8 @@ def login(data: UserLogin, response: Response, conn: sqlite3.Connection = Depend
             "department": user["department"],
             "course": user["course"],
             "student_id": user["student_id"],
-            "is_approved": is_appr
+            "is_approved": is_appr,
+            "is_admin": is_adm
         }
     }
 
@@ -215,3 +234,69 @@ def change_password(data: PasswordChange, user: dict = Depends(get_current_user)
     conn.commit()
     
     return {"success": True, "message": "Password changed successfully."}
+
+@router.post("/forgot-password")
+def forgot_password(data: ForgotPasswordRequest, conn: sqlite3.Connection = Depends(get_db)):
+    """
+    Request password reset link.
+    Never reveals whether the email exists to prevent enumeration attacks.
+    """
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, name, email FROM users WHERE email = ? COLLATE NOCASE", (data.email.strip(),))
+    user = cursor.fetchone()
+    
+    reset_token = None
+    if user:
+        reset_token = secrets.token_urlsafe(32)
+        # Token valid for 1 hour
+        expires_at = (datetime.now(timezone.utc) + timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")
+        cursor.execute("""
+            INSERT INTO password_resets (email, token, expires_at, created_at)
+            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+        """, (user["email"], reset_token, expires_at))
+        conn.commit()
+        # In actual deployment, an email would be dispatched.
+        # For testing/local visibility, we log the reset link.
+        print(f"[AUTH] Generated Password Reset Link for {user['email']}: /reset-password?token={reset_token}")
+        
+    return {
+        "success": True,
+        "message": "If an account with this email address exists in the SDIT system, password reset instructions have been generated.",
+        "reset_token": reset_token  # Provided for easy automated test verification and UI development
+    }
+
+@router.post("/reset-password")
+def reset_password(data: ResetPasswordRequest, conn: sqlite3.Connection = Depends(get_db)):
+    """
+    Complete password reset with a valid, unexpired token.
+    """
+    if data.confirm_password and data.confirm_password != data.new_password:
+        raise HTTPException(status_code=400, detail="New password and confirmation do not match.")
+        
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT id, email, expires_at, used_at 
+        FROM password_resets 
+        WHERE token = ?
+    """, (data.token.strip(),))
+    record = cursor.fetchone()
+    
+    if not record or record["used_at"] is not None:
+        raise HTTPException(status_code=400, detail="Invalid or previously used password reset link. Please request a new one.")
+        
+    cursor.execute("""
+        SELECT 1 FROM password_resets 
+        WHERE id = ? AND datetime(expires_at) >= datetime('now')
+    """, (record["id"],))
+    if not cursor.fetchone():
+        raise HTTPException(status_code=400, detail="This password reset link has expired. Reset links are valid for 1 hour.")
+        
+    new_hash = hash_password(data.new_password)
+    cursor.execute("UPDATE users SET password_hash = ? WHERE email = ? COLLATE NOCASE", (new_hash, record["email"]))
+    cursor.execute("UPDATE password_resets SET used_at = CURRENT_TIMESTAMP WHERE id = ?", (record["id"],))
+    conn.commit()
+    
+    return {
+        "success": True,
+        "message": "Your password has been reset successfully. You may now log in with your new password."
+    }

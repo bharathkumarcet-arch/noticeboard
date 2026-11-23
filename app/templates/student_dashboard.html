@@ -14,34 +14,43 @@
 </div>
 
 <!-- Search and Filter Bar -->
-<div class="filter-bar">
-  <div class="filter-search-box">
+<div class="filter-bar" style="flex-wrap: wrap;">
+  <div class="filter-search-box" style="flex: 1 1 240px;">
     <input 
       type="text" 
       id="searchInput" 
       class="filter-input" 
-      placeholder="Search notices by keyword, title, or topic..."
+      placeholder="Search notices by title, content, or author..."
       oninput="debounceSearch()"
+      aria-label="Search notices by keyword"
     >
   </div>
 
-  <select id="categoryFilter" class="filter-select" onchange="fetchNotices(1)">
+  <select id="categoryFilter" class="filter-select" onchange="fetchNotices(1)" aria-label="Filter by category">
     <option value="all">All Categories</option>
-    <option value="Academic">Academic</option>
-    <option value="Examination">Examination</option>
-    <option value="Placement">Placement</option>
-    <option value="Cultural">Cultural</option>
-    <option value="Sports">Sports</option>
-    <option value="Administrative">Administrative</option>
+    <option value="Academics">Academics</option>
+    <option value="Exams">Exams</option>
+    <option value="Events">Events</option>
+    <option value="Placements">Placements</option>
     <option value="General">General</option>
   </select>
 
-  <select id="priorityFilter" class="filter-select" onchange="fetchNotices(1)">
+  <select id="priorityFilter" class="filter-select" onchange="fetchNotices(1)" aria-label="Filter by priority">
     <option value="all">All Priorities</option>
-    <option value="urgent">Urgent Only</option>
-    <option value="important">Important Only</option>
-    <option value="normal">Normal</option>
+    <option value="urgent">🚨 Urgent Priority</option>
+    <option value="important">⚠️ Important Priority</option>
+    <option value="normal">ℹ️ Regular Priority</option>
   </select>
+
+  <input 
+    type="date" 
+    id="dateFilter" 
+    class="filter-input" 
+    style="max-width: 170px;" 
+    title="Filter by publish date" 
+    onchange="fetchNotices(1)"
+    aria-label="Filter by publish date"
+  >
 
   <button class="btn btn-secondary btn-sm" onclick="resetFilters()">Reset Filters</button>
 </div>
@@ -88,6 +97,7 @@ function resetFilters() {
   document.getElementById("searchInput").value = "";
   document.getElementById("categoryFilter").value = "all";
   document.getElementById("priorityFilter").value = "all";
+  document.getElementById("dateFilter").value = "";
   fetchNotices(1);
 }
 
@@ -103,6 +113,7 @@ async function fetchNotices(page = 1) {
   const q = document.getElementById("searchInput").value.trim();
   const category = document.getElementById("categoryFilter").value;
   const priority = document.getElementById("priorityFilter").value;
+  const dateVal = document.getElementById("dateFilter").value;
 
   const loading = document.getElementById("noticesLoading");
   const container = document.getElementById("noticesContainer");
@@ -121,6 +132,7 @@ async function fetchNotices(page = 1) {
   if (q) params.set("q", q);
   if (category !== "all") params.set("category", category);
   if (priority !== "all") params.set("priority", priority);
+  if (dateVal) params.set("date", dateVal);
 
   try {
     const res = await fetch(`/api/notices?${params.toString()}`);
@@ -141,25 +153,35 @@ async function fetchNotices(page = 1) {
 
     container.innerHTML = data.notices.map(notice => {
       const priorityClass = `priority-${notice.priority}`;
+      const isPinned = Boolean(notice.is_pinned);
+      
+      const pinBadge = isPinned 
+        ? `<span class="badge" style="background:#fef2f2; color:#b91c1c; font-weight:800; border:1px solid #fecaca; display:inline-flex; align-items:center; gap:0.25rem;">📌 PINNED NOTICE</span>`
+        : "";
+
       const priorityBadge = notice.priority === 'urgent' 
-        ? `<span class="badge badge-urgent">🚨 Urgent</span>`
+        ? `<span class="badge badge-urgent" style="font-weight:700;">🚨 URGENT</span>`
         : notice.priority === 'important'
-        ? `<span class="badge badge-important">⚠️ Important</span>`
-        : `<span class="badge badge-normal">ℹ️ Normal</span>`;
+        ? `<span class="badge badge-important" style="font-weight:700;">⚠️ IMPORTANT</span>`
+        : `<span class="badge badge-normal">ℹ️ REGULAR</span>`;
 
       const newBadge = notice.is_new ? `<span class="badge badge-new">✨ New</span>` : "";
+      
       const viewedBadge = notice.has_viewed 
-        ? `<span style="font-size:0.75rem; color:var(--text-muted);">✓ Read</span>` 
-        : `<span style="font-size:0.75rem; color:var(--brand-blue); font-weight:600;">● Unread</span>`;
+        ? `<span style="font-size:0.75rem; color:var(--text-muted); font-weight:500;">✓ Viewed</span>` 
+        : `<span class="badge" style="background:#eff6ff; color:#1d4ed8; font-weight:700; border:1px solid #bfdbfe;">● UNREAD</span>`;
 
       const attachmentPill = notice.attachment_url 
         ? `<span style="display:inline-flex; align-items:center; gap:0.25rem; font-size:0.75rem; background:var(--brand-light); color:var(--brand-blue); padding:0.15rem 0.45rem; border-radius:4px; font-weight:500;">📎 Attachment</span>` 
         : "";
 
+      const cardBorder = isPinned ? "border: 2px solid #f87171; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.1);" : "";
+
       return `
-        <article class="notice-card ${priorityClass}">
+        <article class="notice-card ${priorityClass}" style="${cardBorder}">
           <div class="notice-card-header">
-            <div class="notice-badges">
+            <div class="notice-badges" style="flex-wrap: wrap; gap: 0.35rem;">
+              ${pinBadge}
               ${priorityBadge}
               ${newBadge}
               <span class="badge badge-category">${notice.category}</span>

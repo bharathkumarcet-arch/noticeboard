@@ -27,6 +27,9 @@
             {% elif user.role == 'faculty' %}
               <li><a href="/faculty" class="nav-link {% if active_path == '/faculty' %}active{% endif %}">Dashboard</a></li>
               <li><a href="/faculty/notices" class="nav-link {% if active_path.startswith('/faculty/notices') and active_path != '/faculty/notices/new' %}active{% endif %}">Manage Notices</a></li>
+              {% if user.is_admin %}
+                <li><a href="/faculty/admin/users" class="nav-link {% if active_path == '/faculty/admin/users' %}active{% endif %}">Admin Approvals</a></li>
+              {% endif %}
               <li><a href="/faculty/notices/new" class="btn btn-primary btn-sm">+ New Notice</a></li>
             {% endif %}
 
