@@ -30,21 +30,50 @@
       <input type="text" class="form-input" value="{{ user.email }}" readonly style="background-color: var(--primary-50);">
     </div>
 
-    <div class="form-group">
-      <label class="form-label">Department / Unit</label>
-      <input type="text" class="form-input" value="{{ user.department or 'General' }}" readonly style="background-color: var(--primary-50);">
-    </div>
-
     {% if user.role == 'student' %}
-      <div class="form-grid-2">
-        <div class="form-group">
-          <label class="form-label">Student ID / Roll No</label>
-          <input type="text" class="form-input" value="{{ user.student_id or '-' }}" readonly style="background-color: var(--primary-50);">
+      <div id="profileAlert" style="display:none; padding: 0.75rem 1rem; border-radius: var(--radius-sm); font-size: 0.875rem; margin-bottom: 1rem;"></div>
+
+      <form id="studentAcademicForm" onsubmit="handleUpdateAcademicProfile(event)">
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label for="profileDept" class="form-label">Department / Branch *</label>
+            <select id="profileDept" class="form-select" required>
+              {% for d in departments %}
+                <option value="{{ d }}" {% if user.department == d %}selected{% endif %}>{{ d }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="profileSem" class="form-label">Current Semester *</label>
+            <select id="profileSem" class="form-select" required>
+              {% for s in semesters %}
+                <option value="{{ s }}" {% if user.semester == s %}selected{% endif %}>Semester {{ s }}</option>
+              {% endfor %}
+            </select>
+          </div>
         </div>
-        <div class="form-group">
-          <label class="form-label">Course / Degree</label>
-          <input type="text" class="form-input" value="{{ user.course or '-' }}" readonly style="background-color: var(--primary-50);">
+
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label class="form-label">Student ID / Roll No</label>
+            <input type="text" class="form-input" value="{{ user.student_id or '-' }}" readonly style="background-color: var(--primary-50);">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Course / Degree</label>
+            <input type="text" class="form-input" value="{{ user.course or '-' }}" readonly style="background-color: var(--primary-50);">
+          </div>
         </div>
+
+        <div style="margin-top:0.75rem; margin-bottom:1rem;">
+          <button type="submit" id="saveAcademicBtn" class="btn btn-primary" style="padding: 0.5rem 1rem; font-size:0.875rem;">
+            Save Academic Profile
+          </button>
+        </div>
+      </form>
+    {% else %}
+      <div class="form-group">
+        <label class="form-label">Department / Unit</label>
+        <input type="text" class="form-input" value="{{ user.department or 'General' }}" readonly style="background-color: var(--primary-50);">
       </div>
     {% endif %}
 
@@ -100,6 +129,50 @@
 
 {% block scripts %}
 <script>
+async function handleUpdateAcademicProfile(e) {
+  e.preventDefault();
+  const alertBox = document.getElementById("profileAlert");
+  const saveBtn = document.getElementById("saveAcademicBtn");
+  alertBox.style.display = "none";
+  saveBtn.disabled = true;
+  saveBtn.textContent = "Saving...";
+
+  const dept = document.getElementById("profileDept").value;
+  const sem = parseInt(document.getElementById("profileSem").value, 10);
+
+  try {
+    const res = await fetch("/api/auth/profile", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ department: dept, semester: sem })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      showToast("Academic profile updated! Targeted notices will now reflect your department and semester.", "success");
+      alertBox.style.display = "block";
+      alertBox.style.backgroundColor = "var(--success-bg)";
+      alertBox.style.color = "var(--success-green)";
+      alertBox.style.border = "1px solid var(--success-border)";
+      alertBox.textContent = "Profile updated successfully. Your notice feed is updated!";
+    } else {
+      alertBox.style.display = "block";
+      alertBox.style.backgroundColor = "var(--urgent-bg)";
+      alertBox.style.color = "var(--urgent-red)";
+      alertBox.style.border = "1px solid var(--urgent-border)";
+      alertBox.textContent = data.detail || "Failed to update profile.";
+    }
+  } catch (err) {
+    alertBox.style.display = "block";
+    alertBox.style.backgroundColor = "var(--urgent-bg)";
+    alertBox.style.color = "var(--urgent-red)";
+    alertBox.style.border = "1px solid var(--urgent-border)";
+    alertBox.textContent = "Network error. Please try again.";
+  } finally {
+    saveBtn.disabled = false;
+    saveBtn.textContent = "Save Academic Profile";
+  }
+}
+
 async function handleChangePassword(e) {
   e.preventDefault();
   const alertBox = document.getElementById("pwdAlert");

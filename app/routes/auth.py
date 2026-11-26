@@ -10,7 +10,8 @@ from app.models import (
     UserCreateFaculty,
     PasswordChange,
     ForgotPasswordRequest,
-    ResetPasswordRequest
+    ResetPasswordRequest,
+    StudentProfileUpdate
 )
 from app.security import (
     hash_password,
@@ -26,7 +27,7 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 def login(data: UserLogin, response: Response, conn: sqlite3.Connection = Depends(get_db)):
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT id, name, email, password_hash, role, department, course, student_id, is_approved, is_active, is_admin FROM users WHERE email = ? COLLATE NOCASE",
+        "SELECT id, name, email, password_hash, role, department, course, student_id, semester, is_approved, is_active, is_admin FROM users WHERE email = ? COLLATE NOCASE",
         (data.email,)
     )
     user_row = cursor.fetchone()
@@ -77,6 +78,7 @@ def login(data: UserLogin, response: Response, conn: sqlite3.Connection = Depend
             "department": user["department"],
             "course": user["course"],
             "student_id": user["student_id"],
+            "semester": user.get("semester"),
             "is_approved": is_appr,
             "is_admin": is_adm
         }
@@ -108,10 +110,10 @@ def register_student(data: UserCreateStudent, response: Response, conn: sqlite3.
     pw_hash = hash_password(data.password)
     cursor.execute(
         """
-        INSERT INTO users (name, email, password_hash, role, department, course, student_id, is_approved)
-        VALUES (?, ?, ?, 'student', ?, ?, ?, 1)
+        INSERT INTO users (name, email, password_hash, role, department, course, student_id, semester, is_approved)
+        VALUES (?, ?, ?, 'student', ?, ?, ?, ?, 1)
         """,
-        (data.name.strip(), data.email.strip().lower(), pw_hash, data.department.strip(), data.course.strip(), data.student_id.strip())
+        (data.name.strip(), data.email.strip().lower(), pw_hash, data.department.strip(), data.course.strip(), data.student_id.strip(), data.semester)
     )
     conn.commit()
     user_id = cursor.lastrowid
@@ -139,6 +141,7 @@ def register_student(data: UserCreateStudent, response: Response, conn: sqlite3.
             "department": data.department,
             "course": data.course,
             "student_id": data.student_id,
+            "semester": data.semester,
             "is_approved": True
         }
     }
@@ -219,6 +222,43 @@ def logout(response: Response):
 @router.get("/me")
 def get_current_user_profile(user: dict = Depends(get_current_user)):
     return {"success": True, "user": user}
+
+@router.post("/profile")
+def update_student_profile(
+    data: StudentProfileUpdate,
+    user: dict = Depends(get_current_user),
+    conn: sqlite3.Connection = Depends(get_db)
+):
+    """
+    Allow students to update their academic profile (department and semester 1-8).
+    Safely validates input and ensures audience targeting reflects the change immediately.
+    """
+    if user["role"] != "student":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only students can update academic department and semester."
+        )
+        
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE users 
+        SET department = ?, semester = ?
+        WHERE id = ?
+    """, (data.department.strip(), data.semester, user["id"]))
+    conn.commit()
+    
+    # Fetch updated user profile
+    cursor.execute("""
+        SELECT id, name, email, role, department, course, student_id, semester, is_approved, is_active, is_admin
+        FROM users WHERE id = ?
+    """, (user["id"],))
+    updated_row = dict(cursor.fetchone())
+    
+    return {
+        "success": True,
+        "message": "Academic profile updated successfully.",
+        "user": updated_row
+    }
 
 @router.post("/change-password")
 def change_password(data: PasswordChange, user: dict = Depends(get_current_user), conn: sqlite3.Connection = Depends(get_db)):

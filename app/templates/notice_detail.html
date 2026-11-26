@@ -28,6 +28,12 @@
 
       <span class="badge badge-category">{{ notice.category }}</span>
 
+      {% if notice.target_summary %}
+        <span class="badge" style="background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0; font-weight:600;">
+          🎯 Audience: {{ notice.target_summary }}
+        </span>
+      {% endif %}
+
       {% if user.role == 'faculty' %}
         <span class="badge badge-status-{{ notice.status }}">Status: {{ notice.status | capitalize }}</span>
       {% endif %}

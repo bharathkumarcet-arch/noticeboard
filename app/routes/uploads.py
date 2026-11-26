@@ -84,19 +84,31 @@ def download_attachment(
     if not notice:
         raise HTTPException(status_code=404, detail="Notice associated with this file not found.")
         
-    # If student, verify notice is active and published
+    # If student, verify notice is active, published, and audience-matched
     if user["role"] == "student":
+        student_dept = user.get("department")
+        student_sem = user.get("semester")
         cursor.execute("""
-            SELECT 1 FROM notices
-            WHERE id = ? 
-              AND status = 'published'
-              AND datetime(publish_at) <= datetime('now')
-              AND (expires_at IS NULL OR datetime(expires_at) >= datetime('now'))
-        """, (notice["id"],))
+            SELECT 1 FROM notices n
+            WHERE n.id = ? 
+              AND n.status = 'published'
+              AND datetime(n.publish_at) <= datetime('now')
+              AND (n.expires_at IS NULL OR datetime(n.expires_at) >= datetime('now'))
+              AND (
+                  n.target_type = 'all' OR (
+                      ? IS NOT NULL AND ? IS NOT NULL AND EXISTS (
+                          SELECT 1 FROM notice_audiences na 
+                          WHERE na.notice_id = n.id 
+                            AND (na.department IS NULL OR na.department = ?)
+                            AND (na.semester IS NULL OR na.semester = ?)
+                      )
+                  )
+              )
+        """, (notice["id"], student_dept, student_sem, student_dept, student_sem))
         if not cursor.fetchone():
             raise HTTPException(
                 status_code=403,
-                detail="Access denied. This notice is not currently active."
+                detail="Access denied. This notice attachment is not accessible to your current academic profile (department/semester) or the notice is not active."
             )
             
     display_name = notice["attachment_name"] or clean_filename

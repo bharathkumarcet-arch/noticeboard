@@ -77,6 +77,7 @@ def test_student_signup_flow_and_validations(client):
         "confirm_password": "DifferentPass123!",
         "student_id": "4SD23CS999",
         "department": "Computer Science & Engineering",
+        "semester": 5,
         "course": "B.E. CSE"
     })
     assert mismatch_res.status_code == 400
@@ -90,12 +91,14 @@ def test_student_signup_flow_and_validations(client):
         "confirm_password": "StudentPass123!",
         "student_id": "4SD23CS999",
         "department": "Computer Science & Engineering",
+        "semester": 5,
         "course": "B.E. CSE - 3rd Year"
     })
     assert res.status_code == 201
     data = res.json()
     assert data["user"]["role"] == "student"
     assert data["user"]["name"] == "Jane Student"
+    assert data["user"]["semester"] == 5
 
     # 3. Duplicate email handling
     dup_email_res = client.post("/api/auth/register-student", json={
@@ -105,6 +108,7 @@ def test_student_signup_flow_and_validations(client):
         "confirm_password": "StudentPass123!",
         "student_id": "4SD23CS888",
         "department": "Computer Science & Engineering",
+        "semester": 5,
         "course": "B.E. CSE"
     })
     assert dup_email_res.status_code == 409
@@ -118,6 +122,7 @@ def test_student_signup_flow_and_validations(client):
         "confirm_password": "StudentPass123!",
         "student_id": "4SD23CS999",
         "department": "Computer Science & Engineering",
+        "semester": 5,
         "course": "B.E. CSE"
     })
     assert dup_id_res.status_code == 409
@@ -698,3 +703,131 @@ def test_admin_faculty_account_management(client):
     })
     assert fail_login.status_code == 403
     assert "deactivated" in fail_login.json()["detail"].lower()
+
+def test_audience_targeting_end_to_end(client):
+    from app.security import hash_password
+    with get_db_ctx(TEST_DB_PATH) as conn:
+        # Create Student A: CSE Sem 7
+        conn.execute("""
+            INSERT OR REPLACE INTO users (id, name, email, password_hash, role, department, semester, student_id, is_approved, is_active)
+            VALUES (101, 'Student CSE 7', 'cse7@student.sdit.ac.in', ?, 'student', 'Computer Science & Engineering', 7, '4SD20CS001', 1, 1)
+        """, (hash_password("Pass123!"),))
+        # Create Student B: Mechanical Sem 7
+        conn.execute("""
+            INSERT OR REPLACE INTO users (id, name, email, password_hash, role, department, semester, student_id, is_approved, is_active)
+            VALUES (102, 'Student MECH 7', 'mech7@student.sdit.ac.in', ?, 'student', 'Mechanical Engineering', 7, '4SD20ME001', 1, 1)
+        """, (hash_password("Pass123!"),))
+        # Create Student C: CSE Sem 5
+        conn.execute("""
+            INSERT OR REPLACE INTO users (id, name, email, password_hash, role, department, semester, student_id, is_approved, is_active)
+            VALUES (103, 'Student CSE 5', 'cse5@student.sdit.ac.in', ?, 'student', 'Computer Science & Engineering', 5, '4SD21CS001', 1, 1)
+        """, (hash_password("Pass123!"),))
+        # Create Student D: Incomplete profile (no sem or dept)
+        conn.execute("""
+            INSERT OR REPLACE INTO users (id, name, email, password_hash, role, department, semester, student_id, is_approved, is_active)
+            VALUES (104, 'Student Incomplete', 'incomp@student.sdit.ac.in', ?, 'student', NULL, NULL, '4SD22XX001', 1, 1)
+        """, (hash_password("Pass123!"),))
+        conn.commit()
+
+    # Faculty logs in to create notices
+    client.post("/api/auth/login", json={
+        "email": "turing@sdit.ac.in",
+        "password": "SuperSecret123!",
+        "role": "faculty"
+    })
+
+    # Case 1: Notice to All students
+    res1 = client.post("/api/faculty/notices", data={
+        "title": "College Library Holiday Schedule",
+        "body": "The library will be closed this Friday.",
+        "category": "General",
+        "priority": "normal",
+        "status": "published",
+        "target_type": "all"
+    })
+    assert res1.status_code == 201
+    n_all_id = res1.json()["notice_id"]
+
+    # Case 2: Notice to CSE Semester 7 only
+    res2 = client.post("/api/faculty/notices", data={
+        "title": "CSE 7th Sem Major Project Review",
+        "body": "Major project submission viva scheduled for next Monday.",
+        "category": "Academics",
+        "priority": "urgent",
+        "status": "published",
+        "target_type": "targeted",
+        "target_departments": '["Computer Science & Engineering"]',
+        "target_semesters": "[7]"
+    })
+    assert res2.status_code == 201
+    n_cse7_id = res2.json()["notice_id"]
+
+    # Case 3: Notice to Semester 7 across all departments
+    res3 = client.post("/api/faculty/notices", data={
+        "title": "Campus Placement Drive for 7th Sem",
+        "body": "Registration for Infosys & TCS campus drive.",
+        "category": "Placements",
+        "priority": "important",
+        "status": "published",
+        "target_type": "targeted",
+        "target_semesters": "[7]"
+    })
+    assert res3.status_code == 201
+    n_sem7_id = res3.json()["notice_id"]
+
+    # --- Verification 1: Student CSE 7 logs in ---
+    client.post("/api/auth/login", json={"email": "cse7@student.sdit.ac.in", "password": "Pass123!", "role": "student"})
+    feed1 = client.get("/api/notices").json()["notices"]
+    feed1_ids = [n["id"] for n in feed1]
+    assert n_all_id in feed1_ids
+    assert n_cse7_id in feed1_ids
+    assert n_sem7_id in feed1_ids
+
+    # Detail view of CSE 7 notice works for CSE 7 student
+    d_res = client.get(f"/api/notices/{n_cse7_id}")
+    assert d_res.status_code == 200
+
+    # --- Verification 2: Student MECH 7 logs in ---
+    client.post("/api/auth/login", json={"email": "mech7@student.sdit.ac.in", "password": "Pass123!", "role": "student"})
+    feed2 = client.get("/api/notices").json()["notices"]
+    feed2_ids = [n["id"] for n in feed2]
+    assert n_all_id in feed2_ids
+    assert n_sem7_id in feed2_ids
+    assert n_cse7_id not in feed2_ids  # Hidden! MECH student cannot see CSE 7 notice
+
+    # Direct detail access forbidden for MECH student on CSE 7 notice
+    d_res_mech = client.get(f"/api/notices/{n_cse7_id}")
+    assert d_res_mech.status_code == 403
+
+    # --- Verification 3: Student CSE 5 logs in ---
+    client.post("/api/auth/login", json={"email": "cse5@student.sdit.ac.in", "password": "Pass123!", "role": "student"})
+    feed3 = client.get("/api/notices").json()["notices"]
+    feed3_ids = [n["id"] for n in feed3]
+    assert n_all_id in feed3_ids
+    assert n_cse7_id not in feed3_ids  # Hidden! Sem 5 student cannot see Sem 7 notice
+    assert n_sem7_id not in feed3_ids
+
+    # Direct detail access forbidden for CSE 5 student on CSE 7 notice
+    d_res_cse5 = client.get(f"/api/notices/{n_cse7_id}")
+    assert d_res_cse5.status_code == 403
+
+    # --- Verification 4: Student with incomplete profile ---
+    client.post("/api/auth/login", json={"email": "incomp@student.sdit.ac.in", "password": "Pass123!", "role": "student"})
+    feed4 = client.get("/api/notices").json()["notices"]
+    feed4_ids = [n["id"] for n in feed4]
+    assert n_all_id in feed4_ids
+    assert n_cse7_id not in feed4_ids
+    assert n_sem7_id not in feed4_ids
+
+    # Update profile of incomplete student to CSE 7
+    prof_update = client.post("/api/auth/profile", json={
+        "department": "Computer Science & Engineering",
+        "semester": 7
+    })
+    assert prof_update.status_code == 200
+
+    # Now that profile is CSE 7, targeted notices become visible immediately!
+    feed4_after = client.get("/api/notices").json()["notices"]
+    feed4_after_ids = [n["id"] for n in feed4_after]
+    assert n_cse7_id in feed4_after_ids
+    assert n_sem7_id in feed4_after_ids

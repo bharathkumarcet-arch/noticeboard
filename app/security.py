@@ -91,7 +91,7 @@ def get_current_user_optional(request: Request, conn: sqlite3.Connection = Depen
         
     user_id = payload.get("uid")
     cursor = conn.cursor()
-    cursor.execute("SELECT id, name, email, role, department, course, student_id, is_approved, is_active, is_admin, created_at FROM users WHERE id = ?", (user_id,))
+    cursor.execute("SELECT id, name, email, role, department, course, semester, student_id, is_approved, is_active, is_admin, created_at FROM users WHERE id = ?", (user_id,))
     row = cursor.fetchone()
     if not row:
         return None

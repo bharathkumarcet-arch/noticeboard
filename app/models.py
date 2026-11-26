@@ -12,7 +12,12 @@ class UserCreateStudent(BaseModel):
     confirm_password: Optional[str] = None
     student_id: str = Field(..., min_length=2, max_length=30)
     department: str = Field(..., min_length=2, max_length=100)
-    course: str = Field(..., min_length=2, max_length=100)
+    semester: int = Field(..., ge=1, le=8)
+    course: Optional[str] = Field(None, max_length=100)
+
+class StudentProfileUpdate(BaseModel):
+    department: str = Field(..., min_length=2, max_length=100)
+    semester: int = Field(..., ge=1, le=8)
 
 class UserCreateFaculty(BaseModel):
     name: str = Field(..., min_length=2, max_length=100)
@@ -52,6 +57,9 @@ class NoticeCreate(BaseModel):
     priority: str = Field(default="normal", pattern="^(normal|important|urgent)$")
     status: str = Field(default="draft", pattern="^(draft|published|archived)$")
     is_pinned: Optional[bool] = False
+    target_type: str = Field(default="all", pattern="^(all|targeted)$")
+    target_departments: Optional[List[str]] = None
+    target_semesters: Optional[List[int]] = None
     publish_at: Optional[str] = None
     expires_at: Optional[str] = None
 
@@ -62,6 +70,9 @@ class NoticeUpdate(BaseModel):
     priority: Optional[str] = Field(None, pattern="^(normal|important|urgent)$")
     status: Optional[str] = Field(None, pattern="^(draft|published|archived)$")
     is_pinned: Optional[bool] = None
+    target_type: Optional[str] = Field(None, pattern="^(all|targeted)$")
+    target_departments: Optional[List[str]] = None
+    target_semesters: Optional[List[int]] = None
     publish_at: Optional[str] = None
     expires_at: Optional[str] = None
     remove_attachment: Optional[bool] = False

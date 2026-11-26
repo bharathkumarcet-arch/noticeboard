@@ -47,6 +47,20 @@
     <option value="normal">Normal</option>
   </select>
 
+  <select id="deptFilter" class="filter-select" onchange="fetchFacultyNotices(1)" aria-label="Filter by department audience">
+    <option value="all">All Departments</option>
+    {% for d in departments %}
+      <option value="{{ d }}">{{ d }}</option>
+    {% endfor %}
+  </select>
+
+  <select id="semFilter" class="filter-select" onchange="fetchFacultyNotices(1)" aria-label="Filter by semester audience">
+    <option value="all">All Semesters</option>
+    {% for s in semesters %}
+      <option value="{{ s }}">Semester {{ s }}</option>
+    {% endfor %}
+  </select>
+
   <input 
     type="date" 
     id="dateFilter" 
@@ -68,6 +82,7 @@
         <th>Title</th>
         <th>Category</th>
         <th>Priority</th>
+        <th>Audience Target</th>
         <th>Status</th>
         <th>Publish Schedule</th>
         <th>Unique Readership</th>
@@ -120,6 +135,8 @@ function resetFilters() {
   document.getElementById("statusFilter").value = "all";
   document.getElementById("categoryFilter").value = "all";
   document.getElementById("priorityFilter").value = "all";
+  if (document.getElementById("deptFilter")) document.getElementById("deptFilter").value = "all";
+  if (document.getElementById("semFilter")) document.getElementById("semFilter").value = "all";
   document.getElementById("dateFilter").value = "";
   fetchFacultyNotices(1);
 }
@@ -137,6 +154,8 @@ async function fetchFacultyNotices(page = 1) {
   const status = document.getElementById("statusFilter").value;
   const category = document.getElementById("categoryFilter").value;
   const priority = document.getElementById("priorityFilter").value;
+  const targetDept = document.getElementById("deptFilter") ? document.getElementById("deptFilter").value : "all";
+  const targetSem = document.getElementById("semFilter") ? document.getElementById("semFilter").value : "all";
   const dateVal = document.getElementById("dateFilter").value;
 
   const tbody = document.getElementById("facultyNoticesBody");
@@ -151,6 +170,8 @@ async function fetchFacultyNotices(page = 1) {
   if (status !== "all") params.set("status", status);
   if (category !== "all") params.set("category", category);
   if (priority !== "all") params.set("priority", priority);
+  if (targetDept !== "all") params.set("target_department", targetDept);
+  if (targetSem !== "all") params.set("target_semester", targetSem);
   if (dateVal) params.set("date", dateVal);
 
   try {
@@ -211,6 +232,11 @@ async function fetchFacultyNotices(page = 1) {
           </td>
           <td><span class="badge badge-category">${n.category}</span></td>
           <td>${priorityBadge}</td>
+          <td>
+            <span class="badge" style="background:${n.target_type === 'targeted' ? '#dcfce7' : '#f1f5f9'}; color:${n.target_type === 'targeted' ? '#15803d' : '#475569'}; border:1px solid ${n.target_type === 'targeted' ? '#bbf7d0' : '#e2e8f0'}; max-width: 180px; display: inline-block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeAttr(n.target_summary || 'All Students')}">
+              🎯 ${escapeHtml(n.target_summary || 'All Students')}
+            </span>
+          </td>
           <td>${statusBadge}</td>
           <td style="font-size:0.8rem; color:var(--text-muted);">${formatDate(n.publish_at)}</td>
           <td>

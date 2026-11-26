@@ -95,6 +95,70 @@
         </div>
       </div>
 
+      <!-- Target Audience Section -->
+      <div class="form-group" style="background: #f0fdf4; border: 1px solid #bbf7d0; padding: 1.25rem; border-radius: var(--radius-md); margin-bottom: 1.5rem;">
+        <div style="font-weight: 700; font-size: 1rem; color: #166534; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+          <span>🎯 Target Audience</span>
+          <span style="font-size: 0.75rem; font-weight: normal; background: #dcfce7; color: #15803d; padding: 0.2rem 0.5rem; border-radius: 999px;">Department & Semester Control</span>
+        </div>
+        <p style="font-size: 0.825rem; color: #15803d; margin-bottom: 1rem;">
+          Choose whether this notice is visible to the entire student body or targeted to specific branches and semesters (e.g. "7th Semester – Computer Science").
+        </p>
+
+        <div style="display: flex; gap: 1.5rem; margin-bottom: 1rem; font-size: 0.9rem;">
+          <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-weight: 600; color: #166534;">
+            <input type="radio" name="targetTypeRadio" value="all" id="targetTypeAll" onchange="toggleAudienceInputs()" {% if not is_edit or notice.target_type == 'all' %}checked{% endif %}>
+            All Students (Campus-wide)
+          </label>
+          <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-weight: 600; color: #166534;">
+            <input type="radio" name="targetTypeRadio" value="targeted" id="targetTypeTargeted" onchange="toggleAudienceInputs()" {% if is_edit and notice.target_type == 'targeted' %}checked{% endif %}>
+            Selected Departments / Semesters
+          </label>
+        </div>
+
+        <div id="targetedSelectionBox" style="display: {% if is_edit and notice.target_type == 'targeted' %}block{% else %}none{% endif %}; background: #ffffff; border: 1px solid #86efac; border-radius: var(--radius-sm); padding: 1rem; margin-bottom: 1rem;">
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1.25rem;">
+            <!-- Departments selection -->
+            <div>
+              <label class="form-label" style="font-size: 0.85rem; font-weight: 700; color: #166534; display: flex; justify-content: space-between;">
+                <span>Departments / Branches</span>
+                <span style="font-size: 0.75rem; color: #6b7280; font-weight: normal;">(Leave empty for all branches)</span>
+              </label>
+              <div style="max-height: 180px; overflow-y: auto; border: 1px solid var(--surface-border); border-radius: var(--radius-sm); padding: 0.5rem; background: var(--bg-main);">
+                {% for d in departments %}
+                  <label style="display: flex; align-items: flex-start; gap: 0.5rem; padding: 0.25rem 0.35rem; font-size: 0.825rem; color: var(--text-main); cursor: pointer;">
+                    <input type="checkbox" class="target-dept-cb" value="{{ d }}" onchange="updateAudienceSummary()">
+                    <span>{{ d }}</span>
+                  </label>
+                {% endfor %}
+              </div>
+            </div>
+
+            <!-- Semesters selection -->
+            <div>
+              <label class="form-label" style="font-size: 0.85rem; font-weight: 700; color: #166534; display: flex; justify-content: space-between;">
+                <span>Semesters</span>
+                <span style="font-size: 0.75rem; color: #6b7280; font-weight: normal;">(Leave empty for all semesters)</span>
+              </label>
+              <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.4rem; border: 1px solid var(--surface-border); border-radius: var(--radius-sm); padding: 0.5rem; background: var(--bg-main);">
+                {% for s in semesters %}
+                  <label style="display: flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0.35rem; font-size: 0.825rem; color: var(--text-main); cursor: pointer;">
+                    <input type="checkbox" class="target-sem-cb" value="{{ s }}" onchange="updateAudienceSummary()">
+                    <span>Semester {{ s }}</span>
+                  </label>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Live Audience Summary Preview -->
+        <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; background: rgba(255, 255, 255, 0.7); border: 1px dashed #86efac; padding: 0.6rem 0.85rem; border-radius: var(--radius-sm);">
+          <strong style="color: #166534;">Audience Summary:</strong>
+          <span id="audienceSummaryText" style="font-weight: 600; color: #15803d;">{{ notice.target_summary if is_edit and notice.target_summary else 'All Students' }}</span>
+        </div>
+      </div>
+
       <div class="form-group">
         <label for="noticeBody" class="form-label">Notice Body / Description *</label>
         <textarea 
@@ -167,6 +231,72 @@
 <script>
 const isEdit = {{ 'true' if is_edit else 'false' }};
 const noticeId = {{ notice.id if is_edit else 'null' }};
+
+function toggleAudienceInputs() {
+  const isTargeted = document.getElementById("targetTypeTargeted").checked;
+  const box = document.getElementById("targetedSelectionBox");
+  box.style.display = isTargeted ? "block" : "none";
+  updateAudienceSummary();
+}
+
+function updateAudienceSummary() {
+  const isTargeted = document.getElementById("targetTypeTargeted").checked;
+  const summarySpan = document.getElementById("audienceSummaryText");
+  if (!isTargeted) {
+    summarySpan.textContent = "All Students";
+    return;
+  }
+
+  const selectedDepts = Array.from(document.querySelectorAll(".target-dept-cb:checked")).map(cb => cb.value);
+  const selectedSems = Array.from(document.querySelectorAll(".target-sem-cb:checked")).map(cb => cb.value);
+
+  if (selectedDepts.length === 0 && selectedSems.length === 0) {
+    summarySpan.textContent = "All Students (Please select at least one branch or semester)";
+    return;
+  }
+
+  let text = "";
+  if (selectedSems.length > 0) {
+    text += selectedSems.map(s => `Semester ${s}`).join(", ");
+  } else {
+    text += "All Semesters";
+  }
+
+  if (selectedDepts.length > 0) {
+    text += " · " + selectedDepts.join(", ");
+  } else {
+    text += " · All Branches";
+  }
+
+  summarySpan.textContent = text;
+}
+
+// If editing, load initial audience rules
+document.addEventListener("DOMContentLoaded", async () => {
+  if (isEdit && noticeId) {
+    try {
+      const res = await fetch(`/api/faculty/notices/${noticeId}/audience`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.target_type === "targeted") {
+          document.getElementById("targetTypeTargeted").checked = true;
+          toggleAudienceInputs();
+          const depts = new Set((data.audience.departments || []));
+          const sems = new Set((data.audience.semesters || []).map(String));
+          document.querySelectorAll(".target-dept-cb").forEach(cb => {
+            if (depts.has(cb.value)) cb.checked = true;
+          });
+          document.querySelectorAll(".target-sem-cb").forEach(cb => {
+            if (sems.has(cb.value)) cb.checked = true;
+          });
+          updateAudienceSummary();
+        }
+      }
+    } catch (e) {
+      console.error("Failed to load audience rules", e);
+    }
+  }
+});
 
 function switchFormTab(tab) {
   const tabWrite = document.getElementById("tabWrite");
@@ -243,6 +373,28 @@ async function submitNoticeWithStatus(status) {
   formData.append("category", category);
   formData.append("priority", priority);
   formData.append("status", status);
+
+  // Audience targeting fields
+  const isTargeted = document.getElementById("targetTypeTargeted").checked;
+  const targetType = isTargeted ? "targeted" : "all";
+  formData.append("target_type", targetType);
+
+  if (isTargeted) {
+    const selectedDepts = Array.from(document.querySelectorAll(".target-dept-cb:checked")).map(cb => cb.value);
+    const selectedSems = Array.from(document.querySelectorAll(".target-sem-cb:checked")).map(cb => parseInt(cb.value, 10));
+    
+    if (selectedDepts.length === 0 && selectedSems.length === 0) {
+      alertBox.style.display = "block";
+      alertBox.style.backgroundColor = "var(--urgent-bg)";
+      alertBox.style.color = "var(--urgent-red)";
+      alertBox.style.border = "1px solid var(--urgent-border)";
+      alertBox.textContent = "Please select at least one department or semester for targeted notices, or select 'All Students'.";
+      switchFormTab("write");
+      return;
+    }
+    formData.append("target_departments", JSON.stringify(selectedDepts));
+    formData.append("target_semesters", JSON.stringify(selectedSems));
+  }
 
   const isPinned = document.getElementById("noticeIsPinned") ? document.getElementById("noticeIsPinned").checked : false;
   formData.append("is_pinned", isPinned ? "true" : "false");

@@ -26,5 +26,17 @@ class Settings:
     COOKIE_SECURE: bool = os.getenv("COOKIE_SECURE", "false").lower() == "true"
     COOKIE_SAMESITE: str = "lax"
 
+    # Academic Departments & Semesters for Shree Devi Institute of Technology
+    DEPARTMENTS: list = [
+        "Computer Science & Engineering",
+        "Information Science & Engineering",
+        "Electronics & Communication Engineering",
+        "Mechanical Engineering",
+        "Civil Engineering",
+        "Aeronautical Engineering",
+        "Artificial Intelligence & Machine Learning"
+    ]
+    SEMESTERS: list = [1, 2, 3, 4, 5, 6, 7, 8]
+
 settings = Settings()
 settings.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)

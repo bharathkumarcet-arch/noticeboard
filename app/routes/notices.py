@@ -34,6 +34,23 @@ def list_active_notices(
         "(n.expires_at IS NULL OR datetime(n.expires_at) >= datetime('now'))"
     ]
     params = []
+
+    # Enforce audience targeting if requesting user is a student
+    if user.get("role") == "student":
+        student_dept = user.get("department")
+        student_sem = user.get("semester")
+        # If student's profile is incomplete (missing dept or sem), they only see target_type = 'all'
+        where_clauses.append("""(
+            n.target_type = 'all' OR (
+                ? IS NOT NULL AND ? IS NOT NULL AND EXISTS (
+                    SELECT 1 FROM notice_audiences na 
+                    WHERE na.notice_id = n.id 
+                      AND (na.department IS NULL OR na.department = ?)
+                      AND (na.semester IS NULL OR na.semester = ?)
+                )
+            )
+        )""")
+        params.extend([student_dept, student_sem, student_dept, student_sem])
     
     if q and q.strip():
         term = f"%{q.strip()}%"
@@ -64,6 +81,7 @@ def list_active_notices(
     query_sql = f"""
         SELECT 
             n.id, n.title, n.body, n.category, n.priority, n.status, n.is_pinned,
+            n.target_type, n.target_summary,
             n.attachment_url, n.attachment_name, n.attachment_size,
             n.publish_at, n.expires_at, n.created_at, n.updated_at,
             u.name as author_name, u.department as author_department,
@@ -130,6 +148,7 @@ def get_notice_detail(
     cursor.execute("""
         SELECT 
             n.id, n.title, n.body, n.category, n.priority, n.status, n.is_pinned,
+            n.target_type, n.target_summary,
             n.author_id, n.attachment_url, n.attachment_name, n.attachment_size,
             n.publish_at, n.expires_at, n.created_at, n.updated_at,
             u.name as author_name, u.department as author_department
@@ -146,25 +165,38 @@ def get_notice_detail(
     
     # Permission and visibility check for students
     if user["role"] == "student":
+        student_dept = user.get("department")
+        student_sem = user.get("semester")
+
         cursor.execute("""
-            SELECT 1 FROM notices
-            WHERE id = ? 
-              AND status = 'published'
-              AND datetime(publish_at) <= datetime('now')
-              AND (expires_at IS NULL OR datetime(expires_at) >= datetime('now'))
-        """, (notice_id,))
+            SELECT 1 FROM notices n
+            WHERE n.id = ? 
+              AND n.status = 'published'
+              AND datetime(n.publish_at) <= datetime('now')
+              AND (n.expires_at IS NULL OR datetime(n.expires_at) >= datetime('now'))
+              AND (
+                  n.target_type = 'all' OR (
+                      ? IS NOT NULL AND ? IS NOT NULL AND EXISTS (
+                          SELECT 1 FROM notice_audiences na 
+                          WHERE na.notice_id = n.id 
+                            AND (na.department IS NULL OR na.department = ?)
+                            AND (na.semester IS NULL OR na.semester = ?)
+                      )
+                  )
+              )
+        """, (notice_id, student_dept, student_sem, student_dept, student_sem))
         if not cursor.fetchone():
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="This notice is not currently active or published."
+                detail="This notice is not accessible to your current academic profile (department/semester) or is not currently active."
             )
             
-        # Record student view idempotently!
+        # Record student view idempotently with department and semester snapshot!
         # UNIQUE(notice_id, student_id) ensures one view per student per notice
         cursor.execute("""
-            INSERT OR IGNORE INTO notice_views (notice_id, student_id, first_viewed_at)
-            VALUES (?, ?, CURRENT_TIMESTAMP)
-        """, (notice_id, user["id"]))
+            INSERT OR IGNORE INTO notice_views (notice_id, student_id, first_viewed_at, student_department, student_semester)
+            VALUES (?, ?, CURRENT_TIMESTAMP, ?, ?)
+        """, (notice_id, user["id"], student_dept, student_sem))
         conn.commit()
         
         # Check first_viewed_at for this student

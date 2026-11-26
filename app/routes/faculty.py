@@ -1,14 +1,15 @@
 import os
 import io
 import csv
+import json
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form, Response, status
 import sqlite3
 
 from app.config import settings
-from app.database import get_db, record_audit_log
+from app.database import get_db, record_audit_log, set_notice_audience, get_notice_audience, format_audience_summary
 from app.models import (
     NoticeCreate,
     NoticeUpdate,
@@ -67,6 +68,8 @@ def list_faculty_notices(
     priority: Optional[str] = Query(None),
     date: Optional[str] = Query(None),
     q: Optional[str] = Query(None),
+    target_department: Optional[str] = Query(None),
+    target_semester: Optional[int] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(15, ge=1, le=100),
     user: dict = Depends(require_faculty),
@@ -100,6 +103,24 @@ def list_faculty_notices(
         term = f"%{q.strip()}%"
         where_clauses.append("(n.title LIKE ? OR n.body LIKE ?)")
         params.extend([term, term])
+
+    if target_department and target_department.strip() and target_department != "all":
+        where_clauses.append("""(
+            n.target_type = 'all' OR EXISTS (
+                SELECT 1 FROM notice_audiences na WHERE na.notice_id = n.id AND (na.department IS NULL OR na.department = ?)
+            )
+        )""")
+        params.append(target_department.strip())
+
+    if target_semester and target_semester > 0:
+        where_clauses.append("""(
+            n.target_type = 'all' OR EXISTS (
+                SELECT 1 FROM notice_audiences na WHERE na.notice_id = n.id AND (na.semester IS NULL OR na.semester = ?)
+            )
+        )""")
+        params.append(target_semester)
+        where_clauses.append("(n.title LIKE ? OR n.body LIKE ?)")
+        params.extend([term, term])
         
     where_sql = " AND ".join(where_clauses)
     
@@ -112,6 +133,7 @@ def list_faculty_notices(
     query_sql = f"""
         SELECT 
             n.id, n.title, n.body, n.category, n.priority, n.status, n.is_pinned,
+            n.target_type, n.target_summary,
             n.author_id, n.attachment_url, n.attachment_name, n.attachment_size,
             n.publish_at, n.expires_at, n.created_at, n.updated_at,
             u.name as author_name,
@@ -159,18 +181,54 @@ async def create_notice(
     is_pinned: bool = Form(False),
     publish_at: Optional[str] = Form(None),
     expires_at: Optional[str] = Form(None),
+    target_type: str = Form("all"),
+    target_departments: Optional[str] = Form(None),
+    target_semesters: Optional[str] = Form(None),
     attachment: Optional[UploadFile] = File(None),
     user: dict = Depends(require_approved_faculty),
     conn: sqlite3.Connection = Depends(get_db)
 ):
     """
-    Create a new notice with optional attachment, pin, and scheduled dates.
+    Create a new notice with optional attachment, pin, scheduled dates, and audience targeting.
     """
     title = title.strip()
     body = body.strip()
     category = category.strip()
     priority = priority.strip().lower()
     notice_status = notice_status.strip().lower()
+    target_type = target_type.strip().lower()
+    if target_type not in ("all", "targeted"):
+        target_type = "all"
+        
+    # Parse target departments & semesters
+    depts: List[str] = []
+    if target_departments:
+        try:
+            parsed = json.loads(target_departments)
+            if isinstance(parsed, list):
+                depts = [str(x).strip() for x in parsed if str(x).strip()]
+        except Exception:
+            depts = [x.strip() for x in target_departments.split(",") if x.strip()]
+
+    sems: List[int] = []
+    if target_semesters:
+        try:
+            parsed = json.loads(target_semesters)
+            if isinstance(parsed, list):
+                sems = [int(x) for x in parsed if str(x).strip().isdigit() and 1 <= int(x) <= 8]
+        except Exception:
+            for x in target_semesters.split(","):
+                x = x.strip()
+                if x.isdigit() and 1 <= int(x) <= 8:
+                    sems.append(int(x))
+
+    if target_type == "targeted" and not depts and not sems:
+        raise HTTPException(
+            status_code=400,
+            detail="For targeted notices, please select at least one department or semester, or choose 'All Students'."
+        )
+
+    summary_text = format_audience_summary(target_type, depts, sems)
     
     if len(title) < 3 or len(title) > 200:
         raise HTTPException(status_code=400, detail="Title must be between 3 and 200 characters.")
@@ -184,7 +242,6 @@ async def create_notice(
     # Standardize category matching allowed categories
     cat_match = next((c for c in ALLOWED_CATEGORIES if c.lower() == category.lower()), None)
     if not cat_match:
-        # Default or validate
         cat_match = "General" if category.lower() in ("general", "administrative", "other") else category
     category = cat_match
         
@@ -207,20 +264,27 @@ async def create_notice(
     cursor.execute("""
         INSERT INTO notices (
             title, body, category, priority, status, is_pinned, author_id,
+            target_type, target_summary,
             attachment_url, attachment_name, attachment_size,
             publish_at, expires_at, created_at, updated_at
         ) VALUES (
             ?, ?, ?, ?, ?, ?, ?,
+            ?, ?,
             ?, ?, ?,
             COALESCE(?, CURRENT_TIMESTAMP), ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
         )
     """, (
         title, body, category, priority, notice_status, 1 if is_pinned else 0, user["id"],
+        target_type, summary_text,
         attachment_url, attachment_name, attachment_size,
         publish_val, expires_val
     ))
     conn.commit()
     notice_id = cursor.lastrowid
+
+    # Persist normalized audience targeting rules
+    set_notice_audience(conn, notice_id, target_type, depts, sems)
+    conn.commit()
 
     # Record immutable audit event
     action_name = "scheduled" if (notice_status == "published" and publish_val and publish_val > datetime.now().isoformat()) else notice_status
@@ -230,14 +294,15 @@ async def create_notice(
         action=f"created_{action_name}",
         notice_id=notice_id,
         notice_title=title,
-        details=f"Created with priority '{priority}', category '{category}', pinned={bool(is_pinned)}"
+        details=f"Created with priority '{priority}', category '{category}', pinned={bool(is_pinned)}, audience='{summary_text}'"
     )
     conn.commit()
     
     return {
         "success": True,
-        "message": f"Notice '{title}' created successfully.",
-        "notice_id": notice_id
+        "message": f"Notice '{title}' created successfully for {summary_text}.",
+        "notice_id": notice_id,
+        "target_summary": summary_text
     }
 
 @router.put("/notices/{notice_id}")
@@ -251,6 +316,9 @@ async def update_notice(
     is_pinned: Optional[bool] = Form(None),
     publish_at: Optional[str] = Form(None),
     expires_at: Optional[str] = Form(None),
+    target_type: Optional[str] = Form(None),
+    target_departments: Optional[str] = Form(None),
+    target_semesters: Optional[str] = Form(None),
     remove_attachment: bool = Form(False),
     attachment: Optional[UploadFile] = File(None),
     user: dict = Depends(require_approved_faculty),
@@ -260,7 +328,7 @@ async def update_notice(
     Update an existing notice.
     """
     cursor = conn.cursor()
-    cursor.execute("SELECT id, title, is_pinned, attachment_url FROM notices WHERE id = ?", (notice_id,))
+    cursor.execute("SELECT id, title, is_pinned, attachment_url, target_type, target_summary FROM notices WHERE id = ?", (notice_id,))
     existing = cursor.fetchone()
     if not existing:
         raise HTTPException(status_code=404, detail="Notice not found.")
@@ -290,6 +358,42 @@ async def update_notice(
 
     if publish_val and expires_val and expires_val <= publish_val:
         raise HTTPException(status_code=400, detail="Expiry date must be after publication date.")
+
+    # Audience targeting update
+    new_target_type = target_type.strip().lower() if target_type else existing["target_type"]
+    if new_target_type not in ("all", "targeted"):
+        new_target_type = "all"
+        
+    depts: List[str] = []
+    if target_departments is not None:
+        try:
+            parsed = json.loads(target_departments)
+            if isinstance(parsed, list):
+                depts = [str(x).strip() for x in parsed if str(x).strip()]
+        except Exception:
+            depts = [x.strip() for x in target_departments.split(",") if x.strip()]
+
+    sems: List[int] = []
+    if target_semesters is not None:
+        try:
+            parsed = json.loads(target_semesters)
+            if isinstance(parsed, list):
+                sems = [int(x) for x in parsed if str(x).strip().isdigit() and 1 <= int(x) <= 8]
+        except Exception:
+            for x in target_semesters.split(","):
+                x = x.strip()
+                if x.isdigit() and 1 <= int(x) <= 8:
+                    sems.append(int(x))
+
+    if target_type is not None:
+        if new_target_type == "targeted" and not depts and not sems:
+            raise HTTPException(
+                status_code=400,
+                detail="For targeted notices, please select at least one department or semester, or choose 'All Students'."
+            )
+        target_summary_val = format_audience_summary(new_target_type, depts, sems)
+    else:
+        target_summary_val = existing["target_summary"]
         
     attachment_url = existing["attachment_url"]
     attachment_name = None
@@ -322,29 +426,41 @@ async def update_notice(
         cursor.execute("""
             UPDATE notices
             SET title = ?, body = ?, category = ?, priority = ?, status = ?, is_pinned = ?,
+                target_type = ?, target_summary = ?,
                 publish_at = COALESCE(?, publish_at), expires_at = ?,
                 attachment_url = ?, attachment_name = ?, attachment_size = ?,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
-        """, (title, body, category, priority, notice_status, pinned_val, publish_val, expires_val,
+        """, (title, body, category, priority, notice_status, pinned_val,
+              new_target_type, target_summary_val,
+              publish_val, expires_val,
               attachment_url, attachment_name, attachment_size, notice_id))
     elif remove_attachment:
         cursor.execute("""
             UPDATE notices
             SET title = ?, body = ?, category = ?, priority = ?, status = ?, is_pinned = ?,
+                target_type = ?, target_summary = ?,
                 publish_at = COALESCE(?, publish_at), expires_at = ?,
                 attachment_url = NULL, attachment_name = NULL, attachment_size = NULL,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
-        """, (title, body, category, priority, notice_status, pinned_val, publish_val, expires_val, notice_id))
+        """, (title, body, category, priority, notice_status, pinned_val,
+              new_target_type, target_summary_val,
+              publish_val, expires_val, notice_id))
     else:
         cursor.execute("""
             UPDATE notices
             SET title = ?, body = ?, category = ?, priority = ?, status = ?, is_pinned = ?,
+                target_type = ?, target_summary = ?,
                 publish_at = COALESCE(?, publish_at), expires_at = ?,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
-        """, (title, body, category, priority, notice_status, pinned_val, publish_val, expires_val, notice_id))
+        """, (title, body, category, priority, notice_status, pinned_val,
+              new_target_type, target_summary_val,
+              publish_val, expires_val, notice_id))
+
+    if target_type is not None:
+        set_notice_audience(conn, notice_id, new_target_type, depts, sems)
 
     record_audit_log(
         conn=conn,
@@ -352,10 +468,10 @@ async def update_notice(
         action="edited",
         notice_id=notice_id,
         notice_title=title,
-        details=f"Updated notice details (status: {notice_status}, priority: {priority}, pinned: {bool(pinned_val)})"
+        details=f"Updated notice details (status: {notice_status}, priority: {priority}, pinned: {bool(pinned_val)}, audience: {target_summary_val})"
     )
     conn.commit()
-    return {"success": True, "message": "Notice updated successfully."}
+    return {"success": True, "message": "Notice updated successfully.", "target_summary": target_summary_val}
 
 @router.patch("/notices/{notice_id}/status")
 def update_notice_status(
@@ -492,11 +608,14 @@ def get_notice_readership_analytics(
         SELECT 
             nv.id as view_id,
             nv.first_viewed_at,
+            nv.student_department,
+            nv.student_semester,
             u.id as student_user_id,
             u.name as student_name,
             u.email as student_email,
             u.student_id,
-            u.department,
+            COALESCE(nv.student_department, u.department) as department,
+            COALESCE(nv.student_semester, u.semester) as semester,
             u.course
         FROM notice_views nv
         JOIN users u ON nv.student_id = u.id
@@ -537,7 +656,8 @@ def export_notice_readership_csv(
             u.name as student_name,
             u.email as student_email,
             u.student_id,
-            u.department,
+            COALESCE(nv.student_department, u.department) as department,
+            COALESCE(nv.student_semester, u.semester) as semester,
             u.course,
             nv.first_viewed_at
         FROM notice_views nv
@@ -555,7 +675,7 @@ def export_notice_readership_csv(
     writer.writerow(["Category", notice["category"]])
     writer.writerow(["Priority", notice["priority"]])
     writer.writerow([])
-    writer.writerow(["Student Name", "Email Address", "Student ID", "Department", "Course / Year", "First Viewed At (UTC)"])
+    writer.writerow(["Student Name", "Email Address", "Student ID", "Department", "Semester", "Course / Year", "First Viewed At (UTC)"])
 
     for r in rows:
         writer.writerow([
@@ -563,6 +683,7 @@ def export_notice_readership_csv(
             r["student_email"],
             r["student_id"] or "N/A",
             r["department"] or "N/A",
+            f"Semester {r['semester']}" if r["semester"] else "N/A",
             r["course"] or "N/A",
             r["first_viewed_at"]
         ])
@@ -600,6 +721,31 @@ def get_notice_audit_history(
     logs = [dict(r) for r in cursor.fetchall()]
 
     return {"success": True, "notice_id": notice_id, "audit_logs": logs}
+
+@router.get("/notices/{notice_id}/audience")
+def get_notice_audience_details(
+    notice_id: int,
+    user: dict = Depends(require_faculty),
+    conn: sqlite3.Connection = Depends(get_db)
+):
+    """
+    Get detailed normalized audience targeting rules for a notice.
+    """
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, title, target_type, target_summary FROM notices WHERE id = ?", (notice_id,))
+    notice = cursor.fetchone()
+    if not notice:
+        raise HTTPException(status_code=404, detail="Notice not found.")
+        
+    audience = get_notice_audience(conn, notice_id)
+    return {
+        "success": True,
+        "notice_id": notice_id,
+        "title": notice["title"],
+        "target_type": notice["target_type"],
+        "target_summary": notice["target_summary"],
+        "audience": audience
+    }
 
 # --- Administrator Faculty & User Account Management ---
 

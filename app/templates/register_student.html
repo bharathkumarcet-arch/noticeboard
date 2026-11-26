@@ -42,23 +42,29 @@
 
       <div class="form-grid-2">
         <div class="form-group">
-          <label for="deptInput" class="form-label">Department *</label>
+          <label for="deptInput" class="form-label">Department / Branch *</label>
           <select id="deptInput" class="form-select" required>
             <option value="">Select Department</option>
-            <option value="Computer Science & Engineering">Computer Science & Engineering</option>
-            <option value="Information Science & Engineering">Information Science & Engineering</option>
-            <option value="Electronics & Communication">Electronics & Communication</option>
-            <option value="Mechanical Engineering">Mechanical Engineering</option>
-            <option value="Civil Engineering">Civil Engineering</option>
-            <option value="Aeronautical Engineering">Aeronautical Engineering</option>
-            <option value="Master of Computer Applications (MCA)">Master of Computer Applications (MCA)</option>
-            <option value="Master of Business Administration (MBA)">Master of Business Administration (MBA)</option>
+            {% for d in departments %}
+              <option value="{{ d }}">{{ d }}</option>
+            {% endfor %}
           </select>
         </div>
         <div class="form-group">
-          <label for="courseInput" class="form-label">Course & Year *</label>
-          <input type="text" id="courseInput" class="form-input" placeholder="e.g. B.E. CSE - 3rd Year" required>
+          <label for="semInput" class="form-label">Current Semester *</label>
+          <select id="semInput" class="form-select" required>
+            <option value="">Select Semester</option>
+            {% for s in semesters %}
+              <option value="{{ s }}">Semester {{ s }}</option>
+            {% endfor %}
+          </select>
+          <div class="form-help">Semester 1 to Semester 8</div>
         </div>
+      </div>
+
+      <div class="form-group">
+        <label for="courseInput" class="form-label">Course / Degree Specification *</label>
+        <input type="text" id="courseInput" class="form-input" placeholder="e.g. B.E. Computer Science & Engineering" required>
       </div>
 
       <div class="form-grid-2">
@@ -127,6 +133,7 @@ async function handleStudentRegister(e) {
     student_id: document.getElementById("studentIdInput").value.trim(),
     email: document.getElementById("emailInput").value.trim(),
     department: document.getElementById("deptInput").value.trim(),
+    semester: parseInt(document.getElementById("semInput").value, 10),
     course: document.getElementById("courseInput").value.trim(),
     password: password,
     confirm_password: confirm_password

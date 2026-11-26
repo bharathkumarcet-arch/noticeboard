@@ -20,6 +20,8 @@ def common_context(request: Request, user: Optional[dict] = None) -> dict:
         "user": user,
         "app_name": settings.APP_NAME,
         "college_name": settings.COLLEGE_NAME,
+        "departments": settings.DEPARTMENTS,
+        "semesters": settings.SEMESTERS,
         "active_path": request.url.path
     }
 
@@ -137,23 +139,36 @@ def notice_detail_page(
     
     # Check student visibility
     if user["role"] == "student":
+        student_dept = user.get("department")
+        student_sem = user.get("semester")
+
         cursor.execute("""
-            SELECT 1 FROM notices
-            WHERE id = ? 
-              AND status = 'published'
-              AND datetime(publish_at) <= datetime('now')
-              AND (expires_at IS NULL OR datetime(expires_at) >= datetime('now'))
-        """, (notice_id,))
+            SELECT 1 FROM notices n
+            WHERE n.id = ? 
+              AND n.status = 'published'
+              AND datetime(n.publish_at) <= datetime('now')
+              AND (n.expires_at IS NULL OR datetime(n.expires_at) >= datetime('now'))
+              AND (
+                  n.target_type = 'all' OR (
+                      ? IS NOT NULL AND ? IS NOT NULL AND EXISTS (
+                          SELECT 1 FROM notice_audiences na 
+                          WHERE na.notice_id = n.id 
+                            AND (na.department IS NULL OR na.department = ?)
+                            AND (na.semester IS NULL OR na.semester = ?)
+                      )
+                  )
+              )
+        """, (notice_id, student_dept, student_sem, student_dept, student_sem))
         if not cursor.fetchone():
             ctx = common_context(request, user)
-            ctx["error"] = "This notice is no longer active or is in draft."
+            ctx["error"] = "This notice is targeted to a specific department or semester, or is no longer active."
             return render_template(request, "403.html", ctx, status_code=403)
             
         # Record view idempotently
         cursor.execute("""
-            INSERT OR IGNORE INTO notice_views (notice_id, student_id, first_viewed_at)
-            VALUES (?, ?, CURRENT_TIMESTAMP)
-        """, (notice_id, user["id"]))
+            INSERT OR IGNORE INTO notice_views (notice_id, student_id, first_viewed_at, student_department, student_semester)
+            VALUES (?, ?, CURRENT_TIMESTAMP, ?, ?)
+        """, (notice_id, user["id"], student_dept, student_sem))
         conn.commit()
         
         cursor.execute("SELECT first_viewed_at FROM notice_views WHERE notice_id = ? AND student_id = ?", (notice_id, user["id"]))
